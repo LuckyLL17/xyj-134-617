@@ -1,8 +1,9 @@
-import { generateTerrainFeatures, calculateRadii, generateShelters, generateRoadNetwork, calculateEvacuationPlan } from './physics.js'
+import { generateTerrainFeatures, calculateRadii, generateShelters, generateRoadNetwork, calculateEvacuationPlan } from './physics.ts'
+import type { Explosion, AppState, TerrainData } from '../types/index.js'
 
-let explosionIdCounter = 0
+let explosionIdCounter: number = 0
 
-export function createExplosion(defaults) {
+export function createExplosion(defaults: Partial<Explosion> = {}): Explosion {
     explosionIdCounter++
     return Object.assign({
         id: explosionIdCounter,
@@ -11,13 +12,13 @@ export function createExplosion(defaults) {
         burstHeight: 1000,
         explosionCenter: null,
         radii: null
-    }, defaults || {})
+    }, defaults || {}) as Explosion
 }
 
-export const state = {
+export const state: AppState = {
     explosions: [],
     selectedExplosionId: null,
-    viewMode: 'combined',
+    viewMode: 'combined' as const,
     scale: 20,
     showLabels: true,
     showLegend: true,
@@ -25,7 +26,7 @@ export const state = {
     animationId: null,
     cities: [],
     terrainEnabled: true,
-    terrainPreset: 'mountainous',
+    terrainPreset: 'mountainous' as const,
     terrainIntensity: 1.0,
     terrainSeed: Math.floor(Math.random() * 100000),
     terrainData: null,
@@ -40,30 +41,30 @@ export const state = {
     effectCtx: null
 }
 
-export function getSelectedExplosion() {
+export function getSelectedExplosion(): Explosion | null {
     if (!state.selectedExplosionId) return null
-    return state.explosions.find(function (e) { return e.id === state.selectedExplosionId }) || null
+    return state.explosions.find(function (e: Explosion): boolean { return e.id === state.selectedExplosionId }) || null
 }
 
-export function getExplosionById(id) {
-    return state.explosions.find(function (e) { return e.id === id }) || null
+export function getExplosionById(id: number): Explosion | null {
+    return state.explosions.find(function (e: Explosion): boolean { return e.id === id }) || null
 }
 
-export function regenerateTerrain() {
-    const mapWrapper = document.getElementById('mapWrapper')
+export function regenerateTerrain(): void {
+    const mapWrapper: HTMLElement | null = document.getElementById('mapWrapper')
     if (!mapWrapper) return
-    const rect = mapWrapper.getBoundingClientRect()
+    const rect: DOMRect = mapWrapper.getBoundingClientRect()
     if (state.terrainEnabled) {
         state.terrainData = generateTerrainFeatures(
             rect.width, rect.height,
             state.terrainPreset,
             state.terrainIntensity,
             state.terrainSeed
-        )
+        ) as TerrainData
     } else {
         state.terrainData = generateTerrainFeatures(
             rect.width, rect.height,
             'flat', 0, state.terrainSeed
-        )
+        ) as TerrainData
     }
 }

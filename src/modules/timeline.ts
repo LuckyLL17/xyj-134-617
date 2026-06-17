@@ -1,7 +1,8 @@
-import { rgba, formatNumber } from './data-display.js';
-import { calculateCasualtiesTerrainAware } from './physics.js';
+import type { AppState, TimelineStage } from '../types/index.js';
+import { rgba, formatNumber } from './data-display.ts';
+import { calculateCasualtiesTerrainAware } from './physics.ts';
 
-export const TIMELINE_STAGES = [
+export const TIMELINE_STAGES: TimelineStage[] = [
     {
         id: 0,
         name: '爆炸瞬间',
@@ -49,7 +50,12 @@ export const TIMELINE_STAGES = [
     }
 ];
 
-const WIN_DIRECTIONS = [
+interface WindDirection {
+    angle: number
+    name: string
+}
+
+const WIN_DIRECTIONS: WindDirection[] = [
     { angle: 0, name: '东风' },
     { angle: Math.PI / 4, name: '东南风' },
     { angle: Math.PI / 2, name: '南风' },
@@ -60,13 +66,30 @@ const WIN_DIRECTIONS = [
     { angle: Math.PI * 7 / 4, name: '东北风' }
 ];
 
-let timelineState = {
+interface TimelineState {
+    isActive: boolean
+    isPlaying: boolean
+    currentProgress: number
+    speed: number
+    animationId: number | null
+    lastTimestamp: number | null
+    baseCasualties: { deaths: number; injured: number }
+    baseFalloutRadius: number
+    windDirection: number
+    windStrength: number
+    explosions: any[]
+    cities: any[]
+    scale: number
+    terrainData: any
+}
+
+let timelineState: TimelineState = {
     isActive: false,
     isPlaying: false,
     currentProgress: 0,
     speed: 1,
     animationId: null,
-    lastTimestamp: 0,
+    lastTimestamp: null,
     baseCasualties: { deaths: 0, injured: 0 },
     baseFalloutRadius: 0,
     windDirection: 0,
@@ -77,30 +100,30 @@ let timelineState = {
     terrainData: null
 };
 
-let elements = {};
-let effectCtx = null;
-let effectCanvas = null;
-let trendChartCtx = null;
-let trendChartCanvas = null;
+let elements: Record<string, HTMLElement | null> = {};
+let effectCtx: CanvasRenderingContext2D | null = null;
+let effectCanvas: HTMLCanvasElement | null = null;
+let trendChartCtx: CanvasRenderingContext2D | null = null;
+let trendChartCanvas: HTMLCanvasElement | null = null;
 
-export function initTimeline() {
-    const elementIds = [
+export function initTimeline(): void {
+    const elementIds: string[] = [
         'timelinePanel', 'timelineModeBadge', 'timelineStages',
         'timelinePlayBtn', 'timelineResetBtn', 'timelineSlider', 'timelineSpeed',
         'timelineCurrentTime', 'timelineDeaths', 'timelineInjured', 'timelineFalloutArea',
         'trendChartCanvas', 'effectCanvas'
     ];
 
-    elementIds.forEach(function (id) {
+    elementIds.forEach(function (id: string) {
         elements[id] = document.getElementById(id);
     });
 
-    effectCanvas = elements.effectCanvas;
+    effectCanvas = elements.effectCanvas as HTMLCanvasElement | null;
     if (effectCanvas) {
         effectCtx = effectCanvas.getContext('2d');
     }
 
-    trendChartCanvas = elements.trendChartCanvas;
+    trendChartCanvas = elements.trendChartCanvas as HTMLCanvasElement | null;
     if (trendChartCanvas) {
         trendChartCtx = trendChartCanvas.getContext('2d');
         setupTrendChartCanvas();
@@ -109,15 +132,15 @@ export function initTimeline() {
     setupEventListeners();
 }
 
-function setupTrendChartCanvas() {
+function setupTrendChartCanvas(): void {
     const dpr = window.devicePixelRatio || 1;
-    const rect = trendChartCanvas.getBoundingClientRect();
-    trendChartCanvas.width = rect.width * dpr;
-    trendChartCanvas.height = 180 * dpr;
-    trendChartCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const rect = trendChartCanvas!.getBoundingClientRect();
+    trendChartCanvas!.width = rect.width * dpr;
+    trendChartCanvas!.height = 180 * dpr;
+    trendChartCtx!.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
-function setupEventListeners() {
+function setupEventListeners(): void {
     if (elements.timelinePlayBtn) {
         elements.timelinePlayBtn.addEventListener('click', togglePlay);
     }
@@ -127,34 +150,34 @@ function setupEventListeners() {
     }
 
     if (elements.timelineSlider) {
-        elements.timelineSlider.addEventListener('input', function (e) {
+        elements.timelineSlider.addEventListener('input', function (e: Event) {
             if (!timelineState.isActive) return;
-            const progress = parseInt(e.target.value, 10) / 1000;
+            const progress = parseInt((e.target as HTMLInputElement).value, 10) / 1000;
             setTimelineProgress(progress);
         });
     }
 
     if (elements.timelineSpeed) {
-        elements.timelineSpeed.addEventListener('change', function (e) {
-            timelineState.speed = parseFloat(e.target.value);
+        elements.timelineSpeed.addEventListener('change', function (e: Event) {
+            timelineState.speed = parseFloat((e.target as HTMLSelectElement).value);
         });
     }
 
     if (elements.timelineStages) {
-        elements.timelineStages.querySelectorAll('.stage-dot').forEach(function (dot) {
+        elements.timelineStages.querySelectorAll('.stage-dot').forEach(function (dot: Element) {
             dot.addEventListener('click', function () {
                 if (!timelineState.isActive) return;
-                const stageId = parseInt(dot.dataset.stage, 10);
+                const stageId = parseInt((dot as HTMLElement).dataset.stage!, 10);
                 const progress = stageId / (TIMELINE_STAGES.length - 1);
                 setTimelineProgress(progress);
             });
         });
     }
 
-    let resizeTimeout;
+    let resizeTimeout: number;
     window.addEventListener('resize', function () {
         clearTimeout(resizeTimeout);
-        resizeTimeout = setTimeout(function () {
+        resizeTimeout = window.setTimeout(function () {
             if (trendChartCanvas) {
                 setupTrendChartCanvas();
                 drawTrendChart();
@@ -163,7 +186,7 @@ function setupEventListeners() {
     });
 }
 
-export function startTimelineMode(state, ctx, canvas) {
+export function startTimelineMode(state: AppState, ctx: CanvasRenderingContext2D | null, canvas: HTMLCanvasElement | null): void {
     const activeExplosions = state.explosions.filter(function (e) {
         return e.explosionCenter && e.radii;
     });
@@ -185,7 +208,7 @@ export function startTimelineMode(state, ctx, canvas) {
 
     let maxFalloutRadius = 0;
     activeExplosions.forEach(function (exp) {
-        const falloutR = exp.radii.thermal * 2.5;
+        const falloutR = exp.radii!.thermal * 2.5;
         if (falloutR > maxFalloutRadius) maxFalloutRadius = falloutR;
     });
     timelineState.baseFalloutRadius = maxFalloutRadius;
@@ -203,7 +226,7 @@ export function startTimelineMode(state, ctx, canvas) {
     drawTrendChart();
 }
 
-export function stopTimelineMode() {
+export function stopTimelineMode(): void {
     if (timelineState.animationId) {
         cancelAnimationFrame(timelineState.animationId);
         timelineState.animationId = null;
@@ -218,13 +241,13 @@ export function stopTimelineMode() {
     clearFalloutOverlay();
 }
 
-function enableControls(enabled) {
-    if (elements.timelinePlayBtn) elements.timelinePlayBtn.disabled = !enabled;
-    if (elements.timelineResetBtn) elements.timelineResetBtn.disabled = !enabled;
-    if (elements.timelineSlider) elements.timelineSlider.disabled = !enabled;
-    if (elements.timelineSpeed) elements.timelineSpeed.disabled = !enabled;
+function enableControls(enabled: boolean): void {
+    if (elements.timelinePlayBtn) (elements.timelinePlayBtn as HTMLButtonElement).disabled = !enabled;
+    if (elements.timelineResetBtn) (elements.timelineResetBtn as HTMLButtonElement).disabled = !enabled;
+    if (elements.timelineSlider) (elements.timelineSlider as HTMLInputElement).disabled = !enabled;
+    if (elements.timelineSpeed) (elements.timelineSpeed as HTMLSelectElement).disabled = !enabled;
 
-    elements.timelineStages.querySelectorAll('.stage-dot').forEach(function (dot) {
+    (elements.timelineStages as HTMLElement)!.querySelectorAll('.stage-dot').forEach(function (dot: Element) {
         if (enabled) {
             dot.classList.remove('disabled');
         } else {
@@ -233,7 +256,7 @@ function enableControls(enabled) {
     });
 }
 
-function updateModeBadge(active) {
+function updateModeBadge(active: boolean): void {
     if (!elements.timelineModeBadge) return;
     if (active) {
         elements.timelineModeBadge.textContent = '推演模式';
@@ -244,7 +267,7 @@ function updateModeBadge(active) {
     }
 }
 
-export function togglePlay() {
+export function togglePlay(): void {
     if (!timelineState.isActive) return;
 
     if (timelineState.isPlaying) {
@@ -254,7 +277,7 @@ export function togglePlay() {
     }
 }
 
-export function playTimeline() {
+export function playTimeline(): void {
     if (!timelineState.isActive) return;
     if (timelineState.currentProgress >= 1) {
         timelineState.currentProgress = 0;
@@ -264,14 +287,14 @@ export function playTimeline() {
     timelineState.lastTimestamp = null;
 
     if (elements.timelinePlayBtn) {
-        elements.timelinePlayBtn.innerHTML = '<span class="btn-icon">⏸</span> 暂停';
+        (elements.timelinePlayBtn as HTMLButtonElement).innerHTML = '<span class="btn-icon">⏸</span> 暂停';
         elements.timelinePlayBtn.classList.add('playing');
     }
 
     timelineState.animationId = requestAnimationFrame(animateTimeline);
 }
 
-export function pauseTimeline() {
+export function pauseTimeline(): void {
     timelineState.isPlaying = false;
 
     if (timelineState.animationId) {
@@ -280,18 +303,18 @@ export function pauseTimeline() {
     }
 
     if (elements.timelinePlayBtn) {
-        elements.timelinePlayBtn.innerHTML = '<span class="btn-icon">▶</span> 播放';
+        (elements.timelinePlayBtn as HTMLButtonElement).innerHTML = '<span class="btn-icon">▶</span> 播放';
         elements.timelinePlayBtn.classList.remove('playing');
     }
 }
 
-export function resetTimeline() {
+export function resetTimeline(): void {
     if (!timelineState.isActive) return;
     pauseTimeline();
     setTimelineProgress(0);
 }
 
-function animateTimeline(timestamp) {
+function animateTimeline(timestamp: number): void {
     if (!timelineState.isPlaying) return;
 
     if (!timelineState.lastTimestamp) {
@@ -315,11 +338,11 @@ function animateTimeline(timestamp) {
     timelineState.animationId = requestAnimationFrame(animateTimeline);
 }
 
-export function setTimelineProgress(progress) {
+export function setTimelineProgress(progress: number): void {
     timelineState.currentProgress = Math.max(0, Math.min(1, progress));
 
     if (elements.timelineSlider) {
-        elements.timelineSlider.value = Math.round(timelineState.currentProgress * 1000);
+        (elements.timelineSlider as HTMLInputElement).value = String(Math.round(timelineState.currentProgress * 1000));
     }
 
     updateStageIndicators();
@@ -328,12 +351,12 @@ export function setTimelineProgress(progress) {
     drawTrendChart();
 }
 
-function updateStageIndicators() {
+function updateStageIndicators(): void {
     const stageCount = TIMELINE_STAGES.length;
     const currentStageFloat = timelineState.currentProgress * (stageCount - 1);
     const currentStageIdx = Math.round(currentStageFloat);
 
-    elements.timelineStages.querySelectorAll('.stage-dot').forEach(function (dot, idx) {
+    (elements.timelineStages as HTMLElement)!.querySelectorAll('.stage-dot').forEach(function (dot: Element, idx: number) {
         dot.classList.remove('active', 'completed');
 
         if (idx < currentStageIdx) {
@@ -343,8 +366,8 @@ function updateStageIndicators() {
         }
     });
 
-    const stageLines = elements.timelineStages.querySelectorAll('.stage-line');
-    stageLines.forEach(function (line, idx) {
+    const stageLines = (elements.timelineStages as HTMLElement)!.querySelectorAll('.stage-line');
+    stageLines.forEach(function (line: Element, idx: number) {
         if (idx < currentStageIdx) {
             line.classList.add('filled');
         } else {
@@ -353,7 +376,16 @@ function updateStageIndicators() {
     });
 }
 
-function getInterpolatedValues(progress) {
+interface InterpolatedValues {
+    stage: TimelineStage
+    nextStage?: TimelineStage
+    stageProgress?: number
+    falloutRadiusFactor: number
+    deathFactor: number
+    injuredFactor: number
+}
+
+function getInterpolatedValues(progress: number): InterpolatedValues {
     const stageCount = TIMELINE_STAGES.length;
     const stageFloat = progress * (stageCount - 1);
     const stageIdx = Math.floor(stageFloat);
@@ -384,15 +416,15 @@ function getInterpolatedValues(progress) {
     };
 }
 
-function lerp(a, b, t) {
+function lerp(a: number, b: number, t: number): number {
     return a + (b - a) * t;
 }
 
-function easeInOutCubic(t) {
+function easeInOutCubic(t: number): number {
     return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
-function updateTimelineInfo() {
+function updateTimelineInfo(): void {
     const values = getInterpolatedValues(timelineState.currentProgress);
     const stageIdx = Math.round(timelineState.currentProgress * (TIMELINE_STAGES.length - 1));
     const stage = TIMELINE_STAGES[stageIdx];
@@ -416,7 +448,7 @@ function updateTimelineInfo() {
     }
 }
 
-function drawFalloutOverlay() {
+function drawFalloutOverlay(): void {
     if (!effectCtx || !effectCanvas) return;
 
     const rect = effectCanvas.getBoundingClientRect();
@@ -429,7 +461,7 @@ function drawFalloutOverlay() {
 
     const values = getInterpolatedValues(timelineState.currentProgress);
 
-    timelineState.explosions.forEach(function (exp, expIdx) {
+    timelineState.explosions.forEach(function (exp: any, expIdx: number) {
         const cx = exp.explosionCenter.x;
         const cy = exp.explosionCenter.y;
         const baseRadius = exp.radii.thermal * timelineState.scale * 1.5;
@@ -439,7 +471,7 @@ function drawFalloutOverlay() {
     });
 }
 
-function drawFalloutCloud(cx, cy, radius, expIndex, intensity) {
+function drawFalloutCloud(cx: number, cy: number, radius: number, expIndex: number, intensity: number): void {
     if (radius <= 0) return;
 
     const windAngle = timelineState.windDirection;
@@ -447,7 +479,7 @@ function drawFalloutCloud(cx, cy, radius, expIndex, intensity) {
     const driftX = Math.cos(windAngle) * radius * 0.4 * windStrength;
     const driftY = Math.sin(windAngle) * radius * 0.4 * windStrength;
 
-    const cloudGrad = effectCtx.createRadialGradient(
+    const cloudGrad = effectCtx!.createRadialGradient(
         cx + driftX * 0.3, cy + driftY * 0.3, 0,
         cx + driftX * 0.5, cy + driftY * 0.5, radius
     );
@@ -459,8 +491,8 @@ function drawFalloutCloud(cx, cy, radius, expIndex, intensity) {
     cloudGrad.addColorStop(0.6, rgba(100, 140, 60, baseAlpha * 0.4));
     cloudGrad.addColorStop(1, rgba(80, 120, 50, 0));
 
-    effectCtx.beginPath();
-    effectCtx.ellipse(
+    effectCtx!.beginPath();
+    effectCtx!.ellipse(
         cx + driftX * 0.5,
         cy + driftY * 0.5,
         radius * (1 + windStrength * 0.2),
@@ -468,11 +500,11 @@ function drawFalloutCloud(cx, cy, radius, expIndex, intensity) {
         windAngle,
         0, Math.PI * 2
     );
-    effectCtx.fillStyle = cloudGrad;
-    effectCtx.fill();
+    effectCtx!.fillStyle = cloudGrad;
+    effectCtx!.fill();
 
     const innerRadius = radius * 0.5;
-    const innerGrad = effectCtx.createRadialGradient(
+    const innerGrad = effectCtx!.createRadialGradient(
         cx, cy, 0,
         cx, cy, innerRadius
     );
@@ -480,10 +512,10 @@ function drawFalloutCloud(cx, cy, radius, expIndex, intensity) {
     innerGrad.addColorStop(0.5, rgba(200, 220, 100, baseAlpha * 0.3));
     innerGrad.addColorStop(1, rgba(150, 180, 80, 0));
 
-    effectCtx.beginPath();
-    effectCtx.arc(cx, cy, innerRadius, 0, Math.PI * 2);
-    effectCtx.fillStyle = innerGrad;
-    effectCtx.fill();
+    effectCtx!.beginPath();
+    effectCtx!.arc(cx, cy, innerRadius, 0, Math.PI * 2);
+    effectCtx!.fillStyle = innerGrad;
+    effectCtx!.fill();
 
     if (intensity > 0.3) {
         const particleCount = Math.floor(30 + intensity * 50);
@@ -495,20 +527,20 @@ function drawFalloutCloud(cx, cy, radius, expIndex, intensity) {
             const psize = 1 + Math.random() * 2;
             const palpha = 0.3 + Math.random() * 0.4;
 
-            effectCtx.beginPath();
-            effectCtx.arc(px, py, psize, 0, Math.PI * 2);
-            effectCtx.fillStyle = rgba(180, 255, 120, palpha * intensity);
-            effectCtx.fill();
+            effectCtx!.beginPath();
+            effectCtx!.arc(px, py, psize, 0, Math.PI * 2);
+            effectCtx!.fillStyle = rgba(180, 255, 120, palpha * intensity);
+            effectCtx!.fill();
         }
     }
 
     if (intensity > 0.2) {
         const ringAlpha = intensity * 0.3;
-        effectCtx.strokeStyle = rgba(0, 255, 136, ringAlpha);
-        effectCtx.lineWidth = 2;
-        effectCtx.setLineDash([6, 4]);
-        effectCtx.beginPath();
-        effectCtx.ellipse(
+        effectCtx!.strokeStyle = rgba(0, 255, 136, ringAlpha);
+        effectCtx!.lineWidth = 2;
+        effectCtx!.setLineDash([6, 4]);
+        effectCtx!.beginPath();
+        effectCtx!.ellipse(
             cx + driftX * 0.5,
             cy + driftY * 0.5,
             radius * (1 + windStrength * 0.2),
@@ -516,18 +548,18 @@ function drawFalloutCloud(cx, cy, radius, expIndex, intensity) {
             windAngle,
             0, Math.PI * 2
         );
-        effectCtx.stroke();
-        effectCtx.setLineDash([]);
+        effectCtx!.stroke();
+        effectCtx!.setLineDash([]);
     }
 }
 
-function clearFalloutOverlay() {
+function clearFalloutOverlay(): void {
     if (!effectCtx || !effectCanvas) return;
     const rect = effectCanvas.getBoundingClientRect();
     effectCtx.clearRect(0, 0, rect.width, rect.height);
 }
 
-function drawTrendChart() {
+function drawTrendChart(): void {
     if (!trendChartCtx || !trendChartCanvas) return;
 
     const rect = trendChartCanvas.getBoundingClientRect();
@@ -563,10 +595,10 @@ function drawTrendChart() {
     drawXLabels(trendChartCtx, padding, chartWidth, chartHeight);
 }
 
-function generateTrendData() {
+function generateTrendData(): { deaths: number[]; injured: number[] } {
     const pointCount = 50;
-    const deaths = [];
-    const injured = [];
+    const deaths: number[] = [];
+    const injured: number[] = [];
 
     for (let i = 0; i < pointCount; i++) {
         const progress = i / (pointCount - 1);
@@ -578,7 +610,7 @@ function generateTrendData() {
     return { deaths: deaths, injured: injured };
 }
 
-function drawChartGrid(ctx, padding, chartWidth, chartHeight, maxValue) {
+function drawChartGrid(ctx: CanvasRenderingContext2D, padding: { top: number; right: number; bottom: number; left: number }, chartWidth: number, chartHeight: number, maxValue: number): void {
     ctx.strokeStyle = rgba(100, 100, 140, 0.15);
     ctx.lineWidth = 1;
 
@@ -598,10 +630,10 @@ function drawChartGrid(ctx, padding, chartWidth, chartHeight, maxValue) {
     }
 }
 
-function drawTrendLine(ctx, data, padding, chartWidth, chartHeight, maxValue, color, fillAlpha) {
+function drawTrendLine(ctx: CanvasRenderingContext2D, data: number[], padding: { top: number; right: number; bottom: number; left: number }, chartWidth: number, chartHeight: number, maxValue: number, color: string, fillAlpha: number): void {
     if (data.length < 2) return;
 
-    const points = data.map(function (value, idx) {
+    const points = data.map(function (value: number, idx: number) {
         const x = padding.left + (chartWidth / (data.length - 1)) * idx;
         const y = padding.top + chartHeight - (value / maxValue) * chartHeight;
         return { x: x, y: y };
@@ -652,7 +684,7 @@ function drawTrendLine(ctx, data, padding, chartWidth, chartHeight, maxValue, co
     ctx.stroke();
 }
 
-function drawCurrentIndicator(ctx, idx, data, padding, chartWidth, chartHeight, maxValue) {
+function drawCurrentIndicator(ctx: CanvasRenderingContext2D, idx: number, data: { deaths: number[]; injured: number[] }, padding: { top: number; right: number; bottom: number; left: number }, chartWidth: number, chartHeight: number, maxValue: number): void {
     if (idx < 0 || idx >= data.deaths.length) return;
 
     const x = padding.left + (chartWidth / (data.deaths.length - 1)) * idx;
@@ -686,7 +718,7 @@ function drawCurrentIndicator(ctx, idx, data, padding, chartWidth, chartHeight, 
     ctx.stroke();
 }
 
-function drawXLabels(ctx, padding, chartWidth, chartHeight) {
+function drawXLabels(ctx: CanvasRenderingContext2D, padding: { top: number; right: number; bottom: number; left: number }, chartWidth: number, chartHeight: number): void {
     ctx.fillStyle = rgba(160, 160, 184, 0.7);
     ctx.font = '10px sans-serif';
     ctx.textAlign = 'center';
@@ -699,6 +731,6 @@ function drawXLabels(ctx, padding, chartWidth, chartHeight) {
     }
 }
 
-export function isActive() { return timelineState.isActive; }
-export function isPlaying() { return timelineState.isPlaying; }
-export function getCurrentProgress() { return timelineState.currentProgress; }
+export function isActive(): boolean { return timelineState.isActive; }
+export function isPlaying(): boolean { return timelineState.isPlaying; }
+export function getCurrentProgress(): number { return timelineState.currentProgress; }

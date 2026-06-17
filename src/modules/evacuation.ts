@@ -1,12 +1,24 @@
-import { rgba } from './data-display.js';
+import type { AppState, EvacuationPlan, VehicleParticle, VehicleUpdateStats, ControlElements } from '../types/index.js';
+import { rgba } from './data-display.ts';
+
+interface EvacuationAnimationState {
+    isPlaying: boolean;
+    animationId: number | null;
+    startTime: number;
+    lastTime: number;
+    particles: VehicleParticle[];
+    speed: number;
+    currentTime: number;
+    maxTime: number;
+}
 
 const VEHICLE_COLORS = [
     '#4a9eff', '#66bb6a', '#ffa726', '#ef5350', '#ab47bc',
     '#26c6da', '#ffca28', '#8d6e63', '#ec407a', '#78909c'
 ];
 
-export function createVehicleParticles(evacuationPlan, cities, shelters, scale) {
-    const particles = [];
+export function createVehicleParticles(evacuationPlan: EvacuationPlan, cities: any[], shelters: any[], scale: number): VehicleParticle[] {
+    const particles: VehicleParticle[] = [];
     const cityPlans = evacuationPlan.cityPlans;
 
     cityPlans.forEach(function (plan, planIdx) {
@@ -38,7 +50,7 @@ export function createVehicleParticles(evacuationPlan, cities, shelters, scale) 
     return particles;
 }
 
-export function updateVehicles(particles, evacuationPlan, cities, shelters, graph, deltaTime, speedMultiplier) {
+export function updateVehicles(particles: VehicleParticle[], evacuationPlan: EvacuationPlan, cities: any[], shelters: any[], graph: any, deltaTime: number, speedMultiplier: number): VehicleUpdateStats {
     const nodes = graph.nodes;
     let completedCount = 0;
     let activeCount = 0;
@@ -106,7 +118,7 @@ export function updateVehicles(particles, evacuationPlan, cities, shelters, grap
     };
 }
 
-export function drawRoadDensity(ctx, evacuationPlan, state) {
+export function drawRoadDensity(ctx: CanvasRenderingContext2D, evacuationPlan: EvacuationPlan, state: AppState): void {
     const roadDensities = evacuationPlan.roadDensities;
 
     roadDensities.forEach(function (rd) {
@@ -118,8 +130,8 @@ export function drawRoadDensity(ctx, evacuationPlan, state) {
 
         if (!fromNode || !toNode) return;
 
-        let color;
-        let lineWidth;
+        let color: string;
+        let lineWidth: number;
 
         if (density < 0.3) {
             color = rgba(100, 200, 100, 0.6);
@@ -146,8 +158,8 @@ export function drawRoadDensity(ctx, evacuationPlan, state) {
     });
 }
 
-export function drawShelters(ctx, shelters, state) {
-    shelters.forEach(function (shelter, idx) {
+export function drawShelters(ctx: CanvasRenderingContext2D, shelters: any[], state: AppState): void {
+    shelters.forEach(function (shelter: any, idx: number) {
         const x = shelter.x;
         const y = shelter.y;
         const size = 24;
@@ -201,7 +213,7 @@ export function drawShelters(ctx, shelters, state) {
     });
 }
 
-export function drawVehicles(ctx, particles) {
+export function drawVehicles(ctx: CanvasRenderingContext2D, particles: VehicleParticle[]): void {
     particles.forEach(function (p) {
         if (p.completed || !p.active) return;
 
@@ -216,7 +228,7 @@ export function drawVehicles(ctx, particles) {
     });
 }
 
-export function drawEvacuationFlowArrows(ctx, evacuationPlan) {
+export function drawEvacuationFlowArrows(ctx: CanvasRenderingContext2D, evacuationPlan: EvacuationPlan): void {
     const cityPlans = evacuationPlan.cityPlans;
 
     cityPlans.forEach(function (plan) {
@@ -235,7 +247,7 @@ export function drawEvacuationFlowArrows(ctx, evacuationPlan) {
             const angle = Math.atan2(toNode.y - fromNode.y, toNode.x - fromNode.x);
             const arrowSize = 8;
 
-            let arrowAlpha;
+            let arrowAlpha: number;
             if (plan.canEvacuate) {
                 arrowAlpha = 0.6;
             } else {
@@ -262,13 +274,13 @@ export function drawEvacuationFlowArrows(ctx, evacuationPlan) {
     });
 }
 
-export function formatNumber(num) {
+export function formatNumber(num: number): string {
     if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
     if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
     return Math.round(num).toString();
 }
 
-let animationState = {
+let animationState: EvacuationAnimationState = {
     isPlaying: false,
     animationId: null,
     startTime: 0,
@@ -279,7 +291,7 @@ let animationState = {
     maxTime: 1
 };
 
-export function startEvacuationAnimation(ctx, canvas, state, elements, evacuationPlan) {
+export function startEvacuationAnimation(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, state: AppState, elements: ControlElements, evacuationPlan: EvacuationPlan): void {
     if (animationState.isPlaying) return;
     if (!evacuationPlan || !evacuationPlan.cityPlans) return;
 
@@ -303,7 +315,7 @@ export function startEvacuationAnimation(ctx, canvas, state, elements, evacuatio
     animationState.lastTime = performance.now();
     animationState.startTime = animationState.lastTime;
 
-    function animate(now) {
+    function animate(now: number): void {
         if (!animationState.isPlaying) return;
 
         const deltaTime = (now - animationState.lastTime) / 1000;
@@ -357,7 +369,7 @@ export function startEvacuationAnimation(ctx, canvas, state, elements, evacuatio
             animationState.isPlaying = false;
             if (elements && elements.evacStartBtn) {
                 elements.evacStartBtn.textContent = '▶ 重新播放';
-                elements.evacStartBtn.disabled = false;
+                (elements.evacStartBtn as HTMLButtonElement).disabled = false;
             }
         }
     }
@@ -365,7 +377,7 @@ export function startEvacuationAnimation(ctx, canvas, state, elements, evacuatio
     animationState.animationId = requestAnimationFrame(animate);
 }
 
-export function stopEvacuationAnimation() {
+export function stopEvacuationAnimation(): void {
     animationState.isPlaying = false;
     if (animationState.animationId) {
         cancelAnimationFrame(animationState.animationId);
@@ -373,7 +385,7 @@ export function stopEvacuationAnimation() {
     }
 }
 
-export function resetEvacuationAnimation(ctx, canvas, state, evacuationPlan) {
+export function resetEvacuationAnimation(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, state: AppState, evacuationPlan: EvacuationPlan | null): void {
     stopEvacuationAnimation();
     animationState.currentTime = 0;
     animationState.particles = [];
@@ -388,15 +400,15 @@ export function resetEvacuationAnimation(ctx, canvas, state, evacuationPlan) {
     }
 }
 
-export function isEvacuating() {
+export function isEvacuating(): boolean {
     return animationState.isPlaying;
 }
 
-export function setSpeed(speed) {
+export function setSpeed(speed: number): void {
     animationState.speed = speed;
 }
 
-export function drawEvacuationStatic(ctx, state, evacuationPlan) {
+export function drawEvacuationStatic(ctx: CanvasRenderingContext2D, state: AppState, evacuationPlan: EvacuationPlan | null): void {
     if (!evacuationPlan) return;
     drawRoadDensity(ctx, evacuationPlan, state);
     drawEvacuationFlowArrows(ctx, evacuationPlan);

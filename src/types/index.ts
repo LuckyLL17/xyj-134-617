@@ -67,10 +67,65 @@ export interface Shelter {
     name: string
 }
 
+export interface Road {
+    x1: number
+    y1: number
+    x2: number
+    y2: number
+    capacity?: number
+    lanes?: number
+    isShelterAccess?: boolean
+}
+
+export interface EvacuationEdge {
+    from: number
+    to: number
+    lengthPx: number
+    capacity: number
+    lanes: number
+    flow: number
+    density: number
+}
+
+export interface EvacuationNode {
+    id: number
+    type: 'city' | 'shelter'
+    ref: City | Shelter
+    refIndex: number
+    x: number
+    y: number
+    population?: number
+    capacity?: number
+    edges: EvacuationEdge[]
+}
+
+export interface EvacuationGraph {
+    nodes: EvacuationNode[]
+    nodeMap: Record<string, number>
+}
+
+export interface CityPlan {
+    cityIndex: number
+    population: number
+    shelterId: number | null
+    distanceKm: number
+    path: EvacuationEdge[]
+    evacuated: number
+    stranded: number
+    travelTimeHours: number
+    canEvacuate?: boolean
+}
+
+export interface RoadDensity {
+    edge: EvacuationEdge
+    density: number
+    flow: number
+}
+
 export interface EvacuationPlan {
-    graph: any
-    cityPlans: any[]
-    roadDensities: any[]
+    graph: EvacuationGraph
+    cityPlans: CityPlan[]
+    roadDensities: RoadDensity[]
     totalPopulation: number
     totalEvacuated: number
     totalStranded: number
@@ -99,9 +154,10 @@ export interface AppState {
     shelters: Shelter[]
     selectedShelterIndex: number | null
     evacuationPlan: EvacuationPlan | null
-    evacuationRoads: any[]
+    evacuationRoads: Road[]
     mapCtx: CanvasRenderingContext2D | null
     effectCtx: CanvasRenderingContext2D | null
+    buildingViewMode?: string
 }
 
 export interface BuildingType {
@@ -121,4 +177,206 @@ export interface DamageLevel {
     name: string
     color: string
     order: number
+}
+
+export interface BuildingCasualtyResult {
+    deaths: number
+    injured: number
+    damageLevel: string
+    buildingType?: string
+    overpressure?: number
+}
+
+export interface CityBuildingDamageResult {
+    city: City
+    maxOverpressure: number
+    avgStructureFactor: number
+    buildingResults: Record<string, {
+        population: number
+        damageLevel: string
+        deaths: number
+        injured: number
+        overpressure: number
+    }>
+    totalDeaths: number
+    totalInjured: number
+    totalDestroyedPop: number
+    totalAffectedPop: number
+    distByDamage: Record<string, number>
+    worstSpecialZone: string | null
+    inSpecialZone: boolean
+    survivalRate: number
+}
+
+export interface AllCitiesBuildingDamageResult {
+    cityResults: CityBuildingDamageResult[]
+    totalDeaths: number
+    totalInjured: number
+    totalDestroyedPop: number
+    totalPopulation: number
+    totalByDamage: Record<string, number>
+    totalByBuildingType: Record<string, {
+        population: number
+        deaths: number
+        injured: number
+        damageLevel?: string
+    }>
+    overallSurvivalRate: number
+    maxOverpressure?: number
+    avgStructureFactor?: number
+    isSingleCity?: boolean
+    cityName?: string
+}
+
+export interface PathAttenuationResult {
+    attenuation: number
+    maxObstacleHeight: number
+    pathLengthKm: number
+}
+
+export interface TerrainBoundaryPoint {
+    x: number
+    y: number
+    angle: number
+    attenuation: number
+}
+
+export interface CombinedStats {
+    count: number
+    combinedArea: number
+    totalArea: number
+    overlapArea: number
+    totalEnergy: number
+    perZone: Record<string, number>
+}
+
+export interface ZoneOperationResult {
+    success: boolean
+    error?: string
+    zone?: ZoneDef
+    zones?: ZoneDef[]
+}
+
+export interface ControlElements {
+    [key: string]: HTMLElement | null
+}
+
+export interface DataElements {
+    [key: string]: HTMLElement | null
+}
+
+export interface TimelineStage {
+    id: number
+    name: string
+    timeLabel: string
+    description: string
+    falloutRadiusFactor: number
+    deathFactor: number
+    injuredFactor: number
+}
+
+export interface VehicleParticle {
+    planIndex: number
+    pathIndex: number
+    pathProgress: number
+    startDelay: number
+    speed: number
+    size: number
+    color: string
+    active: boolean
+    completed: boolean
+    x: number
+    y: number
+}
+
+export interface VehicleUpdateStats {
+    total: number
+    active: number
+    completed: number
+}
+
+export interface AnimState {
+    cx: number
+    cy: number
+    scale: number
+    radii: Record<string, number>
+    particles: Particle[]
+    debris: Debris[]
+    smoke: number[]
+    maxShockwave: number
+    terrain: TerrainData | null
+    explosionRef: Explosion
+    tintIndex: number
+    zoneDisplayTimes: Record<string, number>
+    zoneOrder: string[]
+    maxRadiusKm: number
+    quakeStartTime: number
+    quakePeakTime: number
+    quakeEndTime: number
+    displayedZones: Record<string, boolean>
+    soundTriggers: {
+        flash: boolean
+        explosion: boolean
+        shockwaveNear: boolean
+        shockwaveFar: boolean
+        quake: boolean
+        debris: boolean
+    }
+}
+
+export interface Particle {
+    x: number
+    y: number
+    vx: number
+    vy: number
+    size: number
+    life: number
+    color: string
+    gravity: number
+}
+
+export interface Debris {
+    x: number
+    y: number
+    vx: number
+    vy: number
+    size: number
+    rotation: number
+    rotSpeed: number
+    life: number
+    color: string
+}
+
+export interface RgbaColor {
+    r: number
+    g: number
+    b: number
+    a: number
+}
+
+export interface SoundLayerResult {
+    osc: OscillatorNode
+    gain: GainNode
+    filter: BiquadFilterNode | null
+}
+
+export interface NoiseLayerResult {
+    noiseSource: AudioBufferSourceNode
+    gain: GainNode
+    filter: BiquadFilterNode
+}
+
+export interface SoundResult {
+    ctx: AudioContext
+    group: GainNode
+    layers: (SoundLayerResult | NoiseLayerResult)[]
+    startTime: number
+}
+
+export interface TerrainPreset {
+    name: string
+    mountainCount: number
+    hillCount: number
+    basinCount: number
+    elevationScale: number
 }

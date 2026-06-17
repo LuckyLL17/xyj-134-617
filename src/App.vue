@@ -395,12 +395,12 @@
 
 <script setup lang="ts">
 import { onMounted } from 'vue'
-import { state as appState, createExplosion, regenerateTerrain } from './modules/state.js'
-import { calculateRadii, generateShelters, generateRoadNetwork, calculateEvacuationPlan } from './modules/physics.js'
-import { getControlElements, setupEventListeners, refreshExplosionList, syncControlsFromSelected, syncTerrainControlsFromState, updateAllCalculations, updateEvacuationDisplay } from './modules/ui.js'
-import { getElements, updateDataDisplay, populateBuildingCitySelect } from './modules/data-display.js'
-import { setupCanvas, drawMap } from './modules/renderer.js'
-import { initTimeline } from './modules/timeline.js'
+import { state as appState, createExplosion, regenerateTerrain } from './modules/state.ts'
+import { calculateRadii, generateShelters, generateRoadNetwork, calculateEvacuationPlan } from './modules/physics.ts'
+import { getControlElements, setupEventListeners, refreshExplosionList, syncControlsFromSelected, syncTerrainControlsFromState, updateAllCalculations, updateEvacuationDisplay } from './modules/ui.ts'
+import { getElements, updateDataDisplay, populateBuildingCitySelect } from './modules/data-display.ts'
+import { setupCanvas, drawMap } from './modules/renderer.ts'
+import { initTimeline } from './modules/timeline.ts'
 
 const state = appState as any
 

@@ -1,3 +1,4 @@
+import { AppState, ControlElements, DataElements, Explosion, ZoneDef, ZoneOperationResult, TerrainFeature } from '../types/index.ts';
 import {
     BOMB_TYPES,
     TERRAIN_FEATURE_TYPES,
@@ -13,27 +14,27 @@ import {
     addZone,
     resetZones,
     calculateRadii
-} from './physics.js';
+} from './physics.ts';
 import {
     updateDataDisplay,
     updateBuildingDisplay,
     generateDataPanels,
     generateLegend,
     populateBuildingCitySelect
-} from './data-display.js';
-import { drawMap, setupCanvas } from './renderer.js';
-import { animateExplosion } from './animation.js';
+} from './data-display.ts';
+import { drawMap, setupCanvas } from './renderer.ts';
+import { animateExplosion } from './animation.ts';
 import {
     isEvacuating,
     stopEvacuationAnimation,
     setSpeed,
     startEvacuationAnimation,
     resetEvacuationAnimation
-} from './evacuation.js';
-import { isActive as isTimelineActive, stopTimelineMode as stopTimeline, startTimelineMode as startTimeline } from './timeline.js';
-import { createExplosion, regenerateTerrain as regenerateTerrainState } from './state.js';
+} from './evacuation.ts';
+import { isActive as isTimelineActive, stopTimelineMode as stopTimeline, startTimelineMode as startTimeline } from './timeline.ts';
+import { createExplosion, regenerateTerrain as regenerateTerrainState } from './state.ts';
 
-const controlElementIds = [
+const controlElementIds: string[] = [
     'bombType', 'yieldSlider', 'yieldValue', 'burstHeight',
     'scaleSlider', 'scaleValue', 'showLabels', 'showLegend',
     'legend', 'detonateBtn', 'resetBtn',
@@ -65,36 +66,36 @@ const controlElementIds = [
     'zoneInjuryRate', 'zoneInjuryRateValue'
 ];
 
-export function getControlElements() {
-    const elements = {};
-    controlElementIds.forEach(function (id) {
+export function getControlElements(): ControlElements {
+    const elements: ControlElements = {};
+    controlElementIds.forEach(function (id: string) {
         elements[id] = document.getElementById(id);
     });
     return elements;
 }
 
-function getSelectedExplosion(state) {
+function getSelectedExplosion(state: AppState): Explosion | null {
     if (!state.selectedExplosionId) return null;
-    return state.explosions.find(function (e) { return e.id === state.selectedExplosionId; }) || null;
+    return state.explosions.find(function (e: Explosion) { return e.id === state.selectedExplosionId; }) || null;
 }
 
-export function updateCalculations(explosion) {
+export function updateCalculations(explosion: Explosion | null): void {
     if (!explosion) return;
     explosion.radii = calculateRadii(explosion.yieldKilotons, explosion.burstHeight);
 }
 
-export function updateAllCalculations(state) {
+export function updateAllCalculations(state: AppState): void {
     state.explosions.forEach(updateCalculations);
 }
 
-function getBombTypeName(bombType, yieldKilotons) {
+function getBombTypeName(bombType: string, yieldKilotons: number): string {
     if (bombType === 'custom') return '自定义 ' + yieldKilotons.toLocaleString() + 'kt';
     const bomb = BOMB_TYPES[bombType];
     return bomb ? bomb.name : '自定义';
 }
 
-export function refreshExplosionList(state, elements) {
-    const list = elements.explosionList;
+export function refreshExplosionList(state: AppState, elements: ControlElements): void {
+    const list = elements.explosionList!;
     list.innerHTML = '';
 
     if (state.explosions.length === 0) {
@@ -103,10 +104,10 @@ export function refreshExplosionList(state, elements) {
         tip.textContent = '点击「添加爆炸点」开始';
         list.appendChild(tip);
     } else {
-        state.explosions.forEach(function (exp, index) {
+        state.explosions.forEach(function (exp: Explosion, index: number) {
             const item = document.createElement('div');
             item.className = 'explosion-item' + (exp.id === state.selectedExplosionId ? ' active' : '');
-            item.dataset.id = exp.id;
+            item.dataset.id = String(exp.id);
 
             const left = document.createElement('div');
             left.className = 'explosion-item-left';
@@ -144,48 +145,48 @@ export function refreshExplosionList(state, elements) {
         });
     }
 
-    elements.explosionCount.textContent = state.explosions.length;
+    elements.explosionCount!.textContent = String(state.explosions.length);
     updateParamTargetLabel(state, elements);
 }
 
-function updateParamTargetLabel(state, elements) {
-    const index = state.explosions.findIndex(function (e) { return e.id === state.selectedExplosionId; });
+function updateParamTargetLabel(state: AppState, elements: ControlElements): void {
+    const index = state.explosions.findIndex(function (e: Explosion) { return e.id === state.selectedExplosionId; });
     if (index >= 0) {
-        elements.paramTarget.textContent = '（爆炸点 #' + (index + 1) + '）';
+        elements.paramTarget!.textContent = '（爆炸点 #' + (index + 1) + '）';
     } else {
-        elements.paramTarget.textContent = '（无选中）';
+        elements.paramTarget!.textContent = '（无选中）';
     }
 }
 
-export function syncControlsFromSelected(state, elements) {
+export function syncControlsFromSelected(state: AppState, elements: ControlElements): void {
     const selected = getSelectedExplosion(state);
     if (!selected) return;
 
-    elements.bombType.value = selected.bombType;
-    elements.yieldSlider.value = selected.yieldKilotons;
-    elements.yieldValue.textContent = selected.yieldKilotons.toLocaleString();
-    elements.burstHeight.value = String(selected.burstHeight);
+    (elements.bombType as HTMLSelectElement)!.value = selected.bombType;
+    (elements.yieldSlider as HTMLInputElement)!.value = String(selected.yieldKilotons);
+    elements.yieldValue!.textContent = selected.yieldKilotons.toLocaleString();
+    (elements.burstHeight as HTMLInputElement)!.value = String(selected.burstHeight);
 }
 
-export function syncTerrainControlsFromState(state, elements) {
-    if (elements.terrainEnabled) elements.terrainEnabled.checked = state.terrainEnabled;
-    if (elements.terrainPreset) elements.terrainPreset.value = state.terrainPreset;
-    if (elements.terrainIntensity) elements.terrainIntensity.value = String(state.terrainIntensity);
+export function syncTerrainControlsFromState(state: AppState, elements: ControlElements): void {
+    if (elements.terrainEnabled) (elements.terrainEnabled as HTMLInputElement).checked = state.terrainEnabled;
+    if (elements.terrainPreset) (elements.terrainPreset as HTMLSelectElement).value = state.terrainPreset;
+    if (elements.terrainIntensity) (elements.terrainIntensity as HTMLInputElement).value = String(state.terrainIntensity);
     if (elements.terrainIntensityValue) elements.terrainIntensityValue.textContent = state.terrainIntensity.toFixed(1);
-    if (elements.showTerrainHeatmap) elements.showTerrainHeatmap.checked = state.showTerrainHeatmap;
-    if (elements.showTerrainContours) elements.showTerrainContours.checked = state.showTerrainContours;
+    if (elements.showTerrainHeatmap) (elements.showTerrainHeatmap as HTMLInputElement).checked = state.showTerrainHeatmap;
+    if (elements.showTerrainContours) (elements.showTerrainContours as HTMLInputElement).checked = state.showTerrainContours;
     updateTerrainInfo(state, elements);
 }
 
-export function syncStateFromTerrainControls(state, elements) {
-    if (elements.terrainEnabled) state.terrainEnabled = elements.terrainEnabled.checked;
-    if (elements.terrainPreset) state.terrainPreset = elements.terrainPreset.value;
-    if (elements.terrainIntensity) state.terrainIntensity = parseFloat(elements.terrainIntensity.value);
-    if (elements.showTerrainHeatmap) state.showTerrainHeatmap = elements.showTerrainHeatmap.checked;
-    if (elements.showTerrainContours) state.showTerrainContours = elements.showTerrainContours.checked;
+export function syncStateFromTerrainControls(state: AppState, elements: ControlElements): void {
+    if (elements.terrainEnabled) state.terrainEnabled = (elements.terrainEnabled as HTMLInputElement).checked;
+    if (elements.terrainPreset) state.terrainPreset = (elements.terrainPreset as HTMLSelectElement).value;
+    if (elements.terrainIntensity) state.terrainIntensity = parseFloat((elements.terrainIntensity as HTMLInputElement).value);
+    if (elements.showTerrainHeatmap) state.showTerrainHeatmap = (elements.showTerrainHeatmap as HTMLInputElement).checked;
+    if (elements.showTerrainContours) state.showTerrainContours = (elements.showTerrainContours as HTMLInputElement).checked;
 }
 
-export function updateTerrainInfo(state, elements) {
+export function updateTerrainInfo(state: AppState, elements: ControlElements): void {
     if (!state.terrainData || !state.terrainData.features) {
         if (elements.mountainCount) elements.mountainCount.textContent = '0';
         if (elements.hillCount) elements.hillCount.textContent = '0';
@@ -197,20 +198,20 @@ export function updateTerrainInfo(state, elements) {
     const FEATURE_TYPES = TERRAIN_FEATURE_TYPES;
     let mountainCount = 0, hillCount = 0, basinCount = 0, maxElev = 0;
 
-    state.terrainData.features.forEach(function (f) {
+    state.terrainData.features.forEach(function (f: TerrainFeature) {
         if (f.type === FEATURE_TYPES.MOUNTAIN) mountainCount++;
         else if (f.type === FEATURE_TYPES.HILL) hillCount++;
         else if (f.type === FEATURE_TYPES.BASIN) basinCount++;
         if (f.heightPx > maxElev) maxElev = f.heightPx;
     });
 
-    if (elements.mountainCount) elements.mountainCount.textContent = mountainCount;
-    if (elements.hillCount) elements.hillCount.textContent = hillCount;
-    if (elements.basinCount) elements.basinCount.textContent = basinCount;
+    if (elements.mountainCount) elements.mountainCount.textContent = String(mountainCount);
+    if (elements.hillCount) elements.hillCount.textContent = String(hillCount);
+    if (elements.basinCount) elements.basinCount.textContent = String(basinCount);
     if (elements.maxElevation) elements.maxElevation.textContent = Math.round(maxElev).toLocaleString();
 }
 
-export function regenerateTerrain(state, elements, mapCtx, mapWrapper, dataElements, forceNewSeed) {
+export function regenerateTerrain(state: AppState, elements: ControlElements, mapCtx: CanvasRenderingContext2D, mapWrapper: HTMLElement, dataElements: DataElements, forceNewSeed: boolean): void {
     if (forceNewSeed) {
         state.terrainSeed = Math.floor(Math.random() * 100000);
     }
@@ -220,24 +221,24 @@ export function regenerateTerrain(state, elements, mapCtx, mapWrapper, dataEleme
     drawMap(mapCtx, mapWrapper, state);
 }
 
-function syncSelectedFromControls(state, elements) {
+function syncSelectedFromControls(state: AppState, elements: ControlElements): void {
     const selected = getSelectedExplosion(state);
     if (!selected) return;
 
-    selected.bombType = elements.bombType.value;
-    selected.yieldKilotons = parseInt(elements.yieldSlider.value, 10);
-    selected.burstHeight = parseInt(elements.burstHeight.value, 10);
+    selected.bombType = (elements.bombType as HTMLSelectElement)!.value;
+    selected.yieldKilotons = parseInt((elements.yieldSlider as HTMLInputElement)!.value, 10);
+    selected.burstHeight = parseInt((elements.burstHeight as HTMLInputElement)!.value, 10);
 }
 
-function selectExplosion(state, id, elements) {
+function selectExplosion(state: AppState, id: number, elements: ControlElements): void {
     state.selectedExplosionId = id;
     syncControlsFromSelected(state, elements);
     refreshExplosionList(state, elements);
 }
 
-function addExplosion(state, elements, mapWrapper, position) {
+function addExplosion(state: AppState, elements: ControlElements, mapWrapper: HTMLElement, position?: { x: number; y: number }): Explosion {
     const rect = mapWrapper.getBoundingClientRect();
-    let center;
+    let center: { x: number; y: number };
     if (position) {
         center = position;
     } else {
@@ -257,10 +258,10 @@ function addExplosion(state, elements, mapWrapper, position) {
     return newExp;
 }
 
-function findNearestExplosion(x, y, state, thresholdPx) {
-    let nearest = null;
+function findNearestExplosion(x: number, y: number, state: AppState, thresholdPx: number): Explosion | null {
+    let nearest: Explosion | null = null;
     let nearestDist = Infinity;
-    state.explosions.forEach(function (exp) {
+    state.explosions.forEach(function (exp: Explosion) {
         if (!exp.explosionCenter) return;
         const dx = x - exp.explosionCenter.x;
         const dy = y - exp.explosionCenter.y;
@@ -273,12 +274,12 @@ function findNearestExplosion(x, y, state, thresholdPx) {
     return nearest;
 }
 
-function removeSelectedExplosion(state, elements) {
+function removeSelectedExplosion(state: AppState, elements: ControlElements): void {
     if (state.explosions.length <= 1) {
         alert('至少需要保留 1 个爆炸点');
         return;
     }
-    const index = state.explosions.findIndex(function (e) { return e.id === state.selectedExplosionId; });
+    const index = state.explosions.findIndex(function (e: Explosion) { return e.id === state.selectedExplosionId; });
     if (index < 0) return;
 
     state.explosions.splice(index, 1);
@@ -288,7 +289,7 @@ function removeSelectedExplosion(state, elements) {
     refreshExplosionList(state, elements);
 }
 
-export function handleCanvasClick(e, mapCanvas, state, mapHint, dataElements, mapCtx, mapWrapper, elements) {
+export function handleCanvasClick(e: MouseEvent, mapCanvas: HTMLCanvasElement, state: AppState, mapHint: HTMLElement, dataElements: DataElements, mapCtx: CanvasRenderingContext2D, mapWrapper: HTMLElement, elements: ControlElements): void {
     if (state.isAnimating) return;
 
     const rect = mapCanvas.getBoundingClientRect();
@@ -310,7 +311,7 @@ export function handleCanvasClick(e, mapCanvas, state, mapHint, dataElements, ma
     } else {
         const selected = getSelectedExplosion(state);
         if (!selected) {
-            const firstWithPos = state.explosions.find(function (e) { return e.explosionCenter; });
+            const firstWithPos = state.explosions.find(function (exp: Explosion) { return exp.explosionCenter; });
             if (firstWithPos) {
                 selectExplosion(state, firstWithPos.id, elements);
             } else {
@@ -319,7 +320,7 @@ export function handleCanvasClick(e, mapCanvas, state, mapHint, dataElements, ma
             }
         }
         const currentSelected = getSelectedExplosion(state);
-        currentSelected.explosionCenter = { x: x, y: y };
+        currentSelected!.explosionCenter = { x: x, y: y };
         mapHint.classList.add('hidden');
         updateCalculations(currentSelected);
         refreshExplosionList(state, elements);
@@ -329,8 +330,8 @@ export function handleCanvasClick(e, mapCanvas, state, mapHint, dataElements, ma
     drawMap(mapCtx, mapWrapper, state);
 }
 
-function triggerDetonate(state, elements, effectCtx, effectCanvas, mapWrapper, flashOverlay) {
-    const positionedExplosions = state.explosions.filter(function (e) { return e.explosionCenter; });
+function triggerDetonate(state: AppState, elements: ControlElements, effectCtx: CanvasRenderingContext2D, effectCanvas: HTMLCanvasElement, mapWrapper: HTMLElement, flashOverlay: HTMLElement): void {
+    const positionedExplosions = state.explosions.filter(function (e: Explosion) { return e.explosionCenter; });
     if (positionedExplosions.length === 0) {
         alert('请至少为一个爆炸点设置位置');
         return;
@@ -343,7 +344,7 @@ function triggerDetonate(state, elements, effectCtx, effectCanvas, mapWrapper, f
     animateExplosion(effectCtx, effectCanvas, mapWrapper, state, elements, flashOverlay);
 }
 
-function resetAll(state, elements, dataElements, effectCtx, mapWrapper, flashOverlay, mapHint, mapCtx) {
+function resetAll(state: AppState, elements: ControlElements, dataElements: DataElements, effectCtx: CanvasRenderingContext2D, mapWrapper: HTMLElement, flashOverlay: HTMLElement, mapHint: HTMLElement, mapCtx: CanvasRenderingContext2D): void {
     if (state.animationId) {
         cancelAnimationFrame(state.animationId);
     }
@@ -357,7 +358,7 @@ function resetAll(state, elements, dataElements, effectCtx, mapWrapper, flashOve
     state.explosions = [];
     state.selectedExplosionId = null;
 
-    elements.detonateBtn.disabled = false;
+    (elements.detonateBtn as HTMLButtonElement)!.disabled = false;
     flashOverlay.classList.remove('active');
     mapHint.classList.remove('hidden');
 
@@ -390,10 +391,10 @@ function resetAll(state, elements, dataElements, effectCtx, mapWrapper, flashOve
     drawMap(mapCtx, mapWrapper, state);
 }
 
-function handleViewToggle(view, state, elements, dataElements) {
+function handleViewToggle(view: string, state: AppState, elements: ControlElements, dataElements: DataElements): void {
     state.viewMode = view;
-    document.querySelectorAll('.toggle-btn').forEach(function (btn) {
-        btn.classList.toggle('active', btn.dataset.view === view);
+    document.querySelectorAll('.toggle-btn').forEach(function (btn: Element) {
+        btn.classList.toggle('active', (btn as HTMLElement).dataset.view === view);
     });
     const combinedStats = document.getElementById('combinedStats');
     if (combinedStats) {
@@ -402,10 +403,10 @@ function handleViewToggle(view, state, elements, dataElements) {
     updateDataDisplay(dataElements, state);
 }
 
-function handleBuildingViewToggle(view, state, elements) {
+function handleBuildingViewToggle(view: string, state: AppState, elements: ControlElements): void {
     state.buildingViewMode = view;
-    document.querySelectorAll('.building-toggle-btn').forEach(function (btn) {
-        btn.classList.toggle('active', btn.dataset.buildingView === view);
+    document.querySelectorAll('.building-toggle-btn').forEach(function (btn: Element) {
+        btn.classList.toggle('active', (btn as HTMLElement).dataset.buildingView === view);
     });
 
     if (elements.buildingSummaryView) {
@@ -419,7 +420,7 @@ function handleBuildingViewToggle(view, state, elements) {
     }
 }
 
-export function recalculateEvacuation(state, elements, mapCtx, mapWrapper) {
+export function recalculateEvacuation(state: AppState, elements: ControlElements, mapCtx: CanvasRenderingContext2D, mapWrapper: HTMLElement): void {
     if (!state.evacuationEnabled || !state.shelters || state.shelters.length === 0) {
         state.evacuationPlan = null;
         return;
@@ -433,18 +434,18 @@ export function recalculateEvacuation(state, elements, mapCtx, mapWrapper) {
     );
     state.evacuationRoads = roads;
 
-    const capacityMultiplier = parseFloat(elements.roadCapacity ? elements.roadCapacity.value : 1);
+    const capacityMultiplier = parseFloat(elements.roadCapacity ? (elements.roadCapacity as HTMLInputElement).value : '1');
     const adjustedRoads = roads.map(function (road) {
         return {
             ...road,
-            capacity: road.capacity * capacityMultiplier
+            capacity: road.capacity! * capacityMultiplier
         };
     });
 
-    const warningTime = parseInt(elements.warningTimeSlider ? elements.warningTimeSlider.value : 30, 10);
+    const warningTime = parseInt(elements.warningTimeSlider ? (elements.warningTimeSlider as HTMLInputElement).value : '30', 10);
 
     const originalSpeed = VEHICLE_SPEED_KMH;
-    const customSpeed = parseInt(elements.vehicleSpeed ? elements.vehicleSpeed.value : 60, 10);
+    const customSpeed = parseInt(elements.vehicleSpeed ? (elements.vehicleSpeed as HTMLInputElement).value : '60', 10);
     setVehicleSpeed(customSpeed);
 
     state.evacuationPlan = calculateEvacuationPlan(
@@ -460,7 +461,7 @@ export function recalculateEvacuation(state, elements, mapCtx, mapWrapper) {
     updateEvacuationDisplay(state, elements);
 }
 
-export function updateEvacuationDisplay(state, elements) {
+export function updateEvacuationDisplay(state: AppState, elements: ControlElements): void {
     const plan = state.evacuationPlan;
     if (!plan) {
         if (elements.evacTotalPop) elements.evacTotalPop.textContent = '0';
@@ -493,21 +494,21 @@ export function updateEvacuationDisplay(state, elements) {
         }
     }
 
-    const warningTime = parseInt(elements.warningTimeSlider ? elements.warningTimeSlider.value : 30, 10);
+    const warningTime = parseInt(elements.warningTimeSlider ? (elements.warningTimeSlider as HTMLInputElement).value : '30', 10);
     if (elements.evacWarningTime) {
         elements.evacWarningTime.textContent = warningTime + ' 分钟';
     }
 }
 
-function formatNumberShort(num) {
+function formatNumberShort(num: number): string {
     if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
     if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
     return Math.round(num).toString();
 }
 
-export function findNearestShelter(x, y, state, threshold) {
+export function findNearestShelter(x: number, y: number, state: AppState, threshold: number): { shelter: any; index: number } | null {
     if (!state.shelters) return null;
-    let nearest = null;
+    let nearest: { shelter: any; index: number } | null = null;
     let minDist = Infinity;
     state.shelters.forEach(function (shelter, idx) {
         const dx = x - shelter.x;
@@ -521,7 +522,7 @@ export function findNearestShelter(x, y, state, threshold) {
     return nearest;
 }
 
-export function handleEvacCanvasClick(e, mapCanvas, state, mapCtx, mapWrapper, elements) {
+export function handleEvacCanvasClick(e: MouseEvent, mapCanvas: HTMLCanvasElement, state: AppState, mapCtx: CanvasRenderingContext2D, mapWrapper: HTMLElement, elements: ControlElements): void {
     if (!state.evacuationEnabled) return;
 
     const rect = mapCanvas.getBoundingClientRect();
@@ -548,7 +549,7 @@ export function handleEvacCanvasClick(e, mapCanvas, state, mapCtx, mapWrapper, e
     }
 }
 
-export function addShelter(state, elements, mapCtx, mapWrapper) {
+export function addShelter(state: AppState, elements: ControlElements, mapCtx: CanvasRenderingContext2D, mapWrapper: HTMLElement): void {
     const rect = mapWrapper.getBoundingClientRect();
     const count = state.shelters ? state.shelters.length : 0;
     const angle = count * Math.PI * 0.5 + Math.random() * 0.5;
@@ -567,15 +568,15 @@ export function addShelter(state, elements, mapCtx, mapWrapper) {
     state.selectedShelterIndex = state.shelters.length - 1;
 
     if (elements.shelterCount) {
-        elements.shelterCount.value = String(state.shelters.length);
+        (elements.shelterCount as HTMLInputElement).value = String(state.shelters.length);
     }
 
     recalculateEvacuation(state, elements, mapCtx, mapWrapper);
     drawMap(mapCtx, mapWrapper, state);
 }
 
-export function updateShelterCount(state, elements, mapCtx, mapWrapper) {
-    const count = parseInt(elements.shelterCount.value, 10);
+export function updateShelterCount(state: AppState, elements: ControlElements, mapCtx: CanvasRenderingContext2D, mapWrapper: HTMLElement): void {
+    const count = parseInt((elements.shelterCount as HTMLInputElement)!.value, 10);
     const rect = mapWrapper.getBoundingClientRect();
 
     if (!state.shelters || state.shelters.length !== count) {
@@ -588,7 +589,7 @@ export function updateShelterCount(state, elements, mapCtx, mapWrapper) {
     }
 }
 
-export function startEvacAnimation(state, elements, effectCtx, effectCanvas) {
+export function startEvacAnimation(state: AppState, elements: ControlElements, effectCtx: CanvasRenderingContext2D, effectCanvas: HTMLCanvasElement): void {
     if (!state.evacuationPlan) return;
 
     if (isEvacuating()) {
@@ -596,18 +597,18 @@ export function startEvacAnimation(state, elements, effectCtx, effectCanvas) {
     }
 
     if (elements.evacStartBtn) {
-        elements.evacStartBtn.disabled = true;
-        elements.evacStartBtn.textContent = '▶ 播放中...';
+        (elements.evacStartBtn as HTMLButtonElement).disabled = true;
+        (elements.evacStartBtn as HTMLButtonElement).textContent = '▶ 播放中...';
     }
     if (elements.evacPauseBtn) {
-        elements.evacPauseBtn.disabled = false;
+        (elements.evacPauseBtn as HTMLButtonElement).disabled = false;
     }
     if (elements.evacModeBadge) {
         elements.evacModeBadge.textContent = '播放中';
         elements.evacModeBadge.classList.add('playing');
     }
 
-    const speed = parseFloat(elements.evacSpeed ? elements.evacSpeed.value : 1);
+    const speed = parseFloat(elements.evacSpeed ? (elements.evacSpeed as HTMLInputElement).value : '1');
     setSpeed(speed);
 
     startEvacuationAnimation(
@@ -619,16 +620,16 @@ export function startEvacAnimation(state, elements, effectCtx, effectCanvas) {
     );
 }
 
-export function pauseEvacAnimation(elements) {
+export function pauseEvacAnimation(elements: ControlElements): void {
     if (isEvacuating()) {
         stopEvacuationAnimation();
     }
     if (elements.evacStartBtn) {
-        elements.evacStartBtn.disabled = false;
-        elements.evacStartBtn.textContent = '▶ 继续播放';
+        (elements.evacStartBtn as HTMLButtonElement).disabled = false;
+        (elements.evacStartBtn as HTMLButtonElement).textContent = '▶ 继续播放';
     }
     if (elements.evacPauseBtn) {
-        elements.evacPauseBtn.disabled = true;
+        (elements.evacPauseBtn as HTMLButtonElement).disabled = true;
     }
     if (elements.evacModeBadge) {
         elements.evacModeBadge.textContent = '已暂停';
@@ -636,7 +637,7 @@ export function pauseEvacAnimation(elements) {
     }
 }
 
-export function resetEvacAnimation(state, elements, effectCtx, effectCanvas) {
+export function resetEvacAnimation(state: AppState, elements: ControlElements, effectCtx: CanvasRenderingContext2D, effectCanvas: HTMLCanvasElement): void {
     resetEvacuationAnimation(
         effectCtx,
         effectCanvas,
@@ -644,11 +645,11 @@ export function resetEvacAnimation(state, elements, effectCtx, effectCanvas) {
         state.evacuationPlan
     );
     if (elements.evacStartBtn) {
-        elements.evacStartBtn.disabled = false;
-        elements.evacStartBtn.textContent = '▶ 播放动画';
+        (elements.evacStartBtn as HTMLButtonElement).disabled = false;
+        (elements.evacStartBtn as HTMLButtonElement).textContent = '▶ 播放动画';
     }
     if (elements.evacPauseBtn) {
-        elements.evacPauseBtn.disabled = true;
+        (elements.evacPauseBtn as HTMLButtonElement).disabled = true;
     }
     if (elements.evacModeBadge) {
         elements.evacModeBadge.textContent = '就绪';
@@ -666,16 +667,16 @@ export function resetEvacAnimation(state, elements, effectCtx, effectCanvas) {
     updateEvacuationDisplay(state, elements);
 }
 
-export function setupEventListeners(elements, dataElements, state, mapCanvas, mapCtx, effectCtx, effectCanvas, mapWrapper, flashOverlay, mapHint) {
-    elements.bombType.addEventListener('change', function (e) {
+export function setupEventListeners(elements: ControlElements, dataElements: DataElements, state: AppState, mapCanvas: HTMLCanvasElement, mapCtx: CanvasRenderingContext2D, effectCtx: CanvasRenderingContext2D, effectCanvas: HTMLCanvasElement, mapWrapper: HTMLElement, flashOverlay: HTMLElement, mapHint: HTMLElement): void {
+    (elements.bombType as HTMLSelectElement)!.addEventListener('change', function (e: Event) {
         syncSelectedFromControls(state, elements);
         const selected = getSelectedExplosion(state);
-        if (selected && e.target.value !== 'custom') {
-            const bomb = BOMB_TYPES[e.target.value];
+        if (selected && (e.target as HTMLSelectElement).value !== 'custom') {
+            const bomb = BOMB_TYPES[(e.target as HTMLSelectElement).value];
             if (bomb) {
                 selected.yieldKilotons = bomb.yield;
-                elements.yieldSlider.value = bomb.yield;
-                elements.yieldValue.textContent = bomb.yield.toLocaleString();
+                (elements.yieldSlider as HTMLInputElement)!.value = String(bomb.yield);
+                elements.yieldValue!.textContent = bomb.yield.toLocaleString();
             }
         }
         updateCalculations(getSelectedExplosion(state));
@@ -684,9 +685,9 @@ export function setupEventListeners(elements, dataElements, state, mapCanvas, ma
         drawMap(mapCtx, mapWrapper, state);
     });
 
-    elements.yieldSlider.addEventListener('input', function (e) {
+    (elements.yieldSlider as HTMLInputElement)!.addEventListener('input', function () {
         syncSelectedFromControls(state, elements);
-        elements.bombType.value = 'custom';
+        (elements.bombType as HTMLSelectElement)!.value = 'custom';
         const selected = getSelectedExplosion(state);
         if (selected) selected.bombType = 'custom';
         updateCalculations(getSelectedExplosion(state));
@@ -695,7 +696,7 @@ export function setupEventListeners(elements, dataElements, state, mapCanvas, ma
         drawMap(mapCtx, mapWrapper, state);
     });
 
-    elements.burstHeight.addEventListener('change', function () {
+    (elements.burstHeight as HTMLInputElement)!.addEventListener('change', function () {
         syncSelectedFromControls(state, elements);
         updateCalculations(getSelectedExplosion(state));
         refreshExplosionList(state, elements);
@@ -703,67 +704,67 @@ export function setupEventListeners(elements, dataElements, state, mapCanvas, ma
         drawMap(mapCtx, mapWrapper, state);
     });
 
-    elements.scaleSlider.addEventListener('input', function (e) {
-        state.scale = parseInt(e.target.value, 10);
-        elements.scaleValue.textContent = state.scale;
+    (elements.scaleSlider as HTMLInputElement)!.addEventListener('input', function (e: Event) {
+        state.scale = parseInt((e.target as HTMLInputElement).value, 10);
+        elements.scaleValue!.textContent = String(state.scale);
         drawMap(mapCtx, mapWrapper, state);
     });
 
-    elements.showLabels.addEventListener('change', function (e) {
-        state.showLabels = e.target.checked;
+    (elements.showLabels as HTMLInputElement)!.addEventListener('change', function (e: Event) {
+        state.showLabels = (e.target as HTMLInputElement).checked;
         drawMap(mapCtx, mapWrapper, state);
     });
 
-    elements.showLegend.addEventListener('change', function (e) {
-        state.showLegend = e.target.checked;
-        elements.legend.classList.toggle('hidden', !e.target.checked);
+    (elements.showLegend as HTMLInputElement)!.addEventListener('change', function (e: Event) {
+        state.showLegend = (e.target as HTMLInputElement).checked;
+        elements.legend!.classList.toggle('hidden', !(e.target as HTMLInputElement).checked);
     });
 
-    elements.addExplosionBtn.addEventListener('click', function () {
+    elements.addExplosionBtn!.addEventListener('click', function () {
         if (state.isAnimating) return;
         addExplosion(state, elements, mapWrapper);
         updateDataDisplay(dataElements, state);
         drawMap(mapCtx, mapWrapper, state);
     });
 
-    elements.removeExplosionBtn.addEventListener('click', function () {
+    elements.removeExplosionBtn!.addEventListener('click', function () {
         if (state.isAnimating) return;
         removeSelectedExplosion(state, elements);
         updateDataDisplay(dataElements, state);
         drawMap(mapCtx, mapWrapper, state);
     });
 
-    document.querySelectorAll('.toggle-btn').forEach(function (btn) {
+    document.querySelectorAll('.toggle-btn').forEach(function (btn: Element) {
         btn.addEventListener('click', function () {
-            handleViewToggle(btn.dataset.view, state, elements, dataElements);
+            handleViewToggle((btn as HTMLElement).dataset.view!, state, elements, dataElements);
         });
     });
 
-    elements.detonateBtn.addEventListener('click', function () {
+    (elements.detonateBtn as HTMLButtonElement)!.addEventListener('click', function () {
         triggerDetonate(state, elements, effectCtx, effectCanvas, mapWrapper, flashOverlay);
     });
 
-    elements.resetBtn.addEventListener('click', function () {
+    (elements.resetBtn as HTMLButtonElement)!.addEventListener('click', function () {
         resetAll(state, elements, dataElements, effectCtx, mapWrapper, flashOverlay, mapHint, mapCtx);
     });
 
     if (elements.terrainEnabled) {
-        elements.terrainEnabled.addEventListener('change', function (e) {
-            state.terrainEnabled = e.target.checked;
+        elements.terrainEnabled.addEventListener('change', function (e: Event) {
+            state.terrainEnabled = (e.target as HTMLInputElement).checked;
             regenerateTerrain(state, elements, mapCtx, mapWrapper, dataElements, false);
         });
     }
 
     if (elements.terrainPreset) {
-        elements.terrainPreset.addEventListener('change', function (e) {
-            state.terrainPreset = e.target.value;
+        elements.terrainPreset.addEventListener('change', function (e: Event) {
+            state.terrainPreset = (e.target as HTMLSelectElement).value;
             regenerateTerrain(state, elements, mapCtx, mapWrapper, dataElements, false);
         });
     }
 
     if (elements.terrainIntensity) {
-        elements.terrainIntensity.addEventListener('input', function (e) {
-            state.terrainIntensity = parseFloat(e.target.value);
+        elements.terrainIntensity.addEventListener('input', function (e: Event) {
+            state.terrainIntensity = parseFloat((e.target as HTMLInputElement).value);
             if (elements.terrainIntensityValue) {
                 elements.terrainIntensityValue.textContent = state.terrainIntensity.toFixed(1);
             }
@@ -772,15 +773,15 @@ export function setupEventListeners(elements, dataElements, state, mapCanvas, ma
     }
 
     if (elements.showTerrainHeatmap) {
-        elements.showTerrainHeatmap.addEventListener('change', function (e) {
-            state.showTerrainHeatmap = e.target.checked;
+        elements.showTerrainHeatmap.addEventListener('change', function (e: Event) {
+            state.showTerrainHeatmap = (e.target as HTMLInputElement).checked;
             drawMap(mapCtx, mapWrapper, state);
         });
     }
 
     if (elements.showTerrainContours) {
-        elements.showTerrainContours.addEventListener('change', function (e) {
-            state.showTerrainContours = e.target.checked;
+        elements.showTerrainContours.addEventListener('change', function (e: Event) {
+            state.showTerrainContours = (e.target as HTMLInputElement).checked;
             drawMap(mapCtx, mapWrapper, state);
         });
     }
@@ -792,13 +793,13 @@ export function setupEventListeners(elements, dataElements, state, mapCanvas, ma
     }
 
     if (elements.evacuationEnabled) {
-        elements.evacuationEnabled.addEventListener('change', function (e) {
-            state.evacuationEnabled = e.target.checked;
+        elements.evacuationEnabled.addEventListener('change', function (e: Event) {
+            state.evacuationEnabled = (e.target as HTMLInputElement).checked;
             if (state.evacuationEnabled && state.shelters && state.shelters.length > 0) {
                 recalculateEvacuation(state, elements, mapCtx, mapWrapper);
             }
             if (elements.evacuationPanel) {
-                elements.evacuationPanel.classList.toggle('hidden', !e.target.checked);
+                elements.evacuationPanel.classList.toggle('hidden', !(e.target as HTMLInputElement).checked);
             }
             drawMap(mapCtx, mapWrapper, state);
         });
@@ -811,10 +812,10 @@ export function setupEventListeners(elements, dataElements, state, mapCanvas, ma
     }
 
     if (elements.warningTimeSlider) {
-        elements.warningTimeSlider.addEventListener('input', function (e) {
-            const value = parseInt(e.target.value, 10);
+        elements.warningTimeSlider.addEventListener('input', function (e: Event) {
+            const value = parseInt((e.target as HTMLInputElement).value, 10);
             if (elements.warningTimeValue) {
-                elements.warningTimeValue.textContent = value;
+                elements.warningTimeValue.textContent = String(value);
             }
         });
         elements.warningTimeSlider.addEventListener('change', function () {
@@ -874,15 +875,15 @@ export function setupEventListeners(elements, dataElements, state, mapCanvas, ma
     }
 
     if (elements.evacSpeed) {
-        elements.evacSpeed.addEventListener('change', function (e) {
-            const speed = parseFloat(e.target.value);
+        elements.evacSpeed.addEventListener('change', function (e: Event) {
+            const speed = parseFloat((e.target as HTMLInputElement).value);
             setSpeed(speed);
         });
     }
 
-    document.querySelectorAll('.building-toggle-btn').forEach(function (btn) {
+    document.querySelectorAll('.building-toggle-btn').forEach(function (btn: Element) {
         btn.addEventListener('click', function () {
-            handleBuildingViewToggle(btn.dataset.buildingView, state, elements);
+            handleBuildingViewToggle((btn as HTMLElement).dataset.buildingView!, state, elements);
         });
     });
 
@@ -892,7 +893,7 @@ export function setupEventListeners(elements, dataElements, state, mapCanvas, ma
         });
     }
 
-    mapCanvas.addEventListener('click', function (e) {
+    mapCanvas.addEventListener('click', function (e: MouseEvent) {
         if (state.evacuationEnabled && state.selectedShelterIndex !== undefined && state.selectedShelterIndex !== null) {
             handleEvacCanvasClick(e, mapCanvas, state, mapCtx, mapWrapper, elements);
             resetEvacAnimation(state, elements, effectCtx, effectCanvas);
@@ -902,7 +903,7 @@ export function setupEventListeners(elements, dataElements, state, mapCanvas, ma
         updateBuildingDisplay(elements, state);
     });
 
-    let resizeTimeout;
+    let resizeTimeout: ReturnType<typeof setTimeout>;
     window.addEventListener('resize', function () {
         clearTimeout(resizeTimeout);
         resizeTimeout = setTimeout(function () {
@@ -915,60 +916,58 @@ export function setupEventListeners(elements, dataElements, state, mapCanvas, ma
         }, 200);
     });
 
-    let editingZoneKey = null;
-    let draggedZoneIndex = null;
+    let editingZoneKey: string | null = null;
+    let draggedZoneIndex: number | null = null;
 
-    function rgbToHex(r, g, b) {
-        return '#' + [r, g, b].map(function (x) {
+    function rgbToHex(r: number, g: number, b: number): string {
+        return '#' + [r, g, b].map(function (x: number) {
             const hex = Math.round(x).toString(16);
             return hex.length === 1 ? '0' + hex : hex;
         }).join('');
     }
 
-    function refreshZoneList(state, elements, mapCtx, mapWrapper, dataElements) {
+    function refreshZoneList(state: AppState, elements: ControlElements, mapCtx: CanvasRenderingContext2D, mapWrapper: HTMLElement, dataElements: DataElements): void {
         if (!elements.zoneList) return;
 
         const zones = getZones();
         elements.zoneList.innerHTML = '';
 
-        zones.forEach(function (zone, index) {
+        zones.forEach(function (zone: ZoneDef, index: number) {
             const item = document.createElement('div');
             item.className = 'zone-item';
             item.draggable = true;
             item.dataset.zoneKey = zone.key;
-            item.dataset.index = index;
+            item.dataset.index = String(index);
 
             const color = zone.color || [128, 128, 128];
             const hexColor = rgbToHex(color[0], color[1], color[2]);
 
-            item.innerHTML = `
-                <div class="zone-drag-handle" title="拖动排序">⋮⋮</div>
-                <div class="zone-color-preview" style="background: ${hexColor};"></div>
-                <div class="zone-info">
-                    <div class="zone-name">${zone.label}</div>
-                    <div class="zone-key">${zone.key} · ${zone.overpressureThreshold} psi</div>
-                </div>
-                <div class="zone-actions">
-                    <button class="zone-edit-btn" title="编辑">✏️</button>
-                    <button class="zone-delete-btn" title="删除">🗑️</button>
-                </div>
-            `;
+            item.innerHTML = '<div class="zone-drag-handle" title="拖动排序">⋮⋮</div>' +
+                '<div class="zone-color-preview" style="background: ' + hexColor + ';"></div>' +
+                '<div class="zone-info">' +
+                '<div class="zone-name">' + zone.label + '</div>' +
+                '<div class="zone-key">' + zone.key + ' · ' + zone.overpressureThreshold + ' psi</div>' +
+                '</div>' +
+                '<div class="zone-actions">' +
+                '<button class="zone-edit-btn" title="编辑">✏️</button>' +
+                '<button class="zone-delete-btn" title="删除">🗑️</button>' +
+                '</div>';
 
-            item.addEventListener('dragstart', function (e) {
+            item.addEventListener('dragstart', function (e: DragEvent) {
                 draggedZoneIndex = index;
                 item.classList.add('dragging');
-                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer!.effectAllowed = 'move';
             });
 
             item.addEventListener('dragend', function () {
                 item.classList.remove('dragging');
                 draggedZoneIndex = null;
-                document.querySelectorAll('.zone-item').forEach(function (el) {
+                document.querySelectorAll('.zone-item').forEach(function (el: Element) {
                     el.classList.remove('drag-over');
                 });
             });
 
-            item.addEventListener('dragover', function (e) {
+            item.addEventListener('dragover', function (e: DragEvent) {
                 e.preventDefault();
                 if (draggedZoneIndex !== null && draggedZoneIndex !== index) {
                     item.classList.add('drag-over');
@@ -979,7 +978,7 @@ export function setupEventListeners(elements, dataElements, state, mapCanvas, ma
                 item.classList.remove('drag-over');
             });
 
-            item.addEventListener('drop', function (e) {
+            item.addEventListener('drop', function (e: DragEvent) {
                 e.preventDefault();
                 item.classList.remove('drag-over');
                 if (draggedZoneIndex !== null && draggedZoneIndex !== index) {
@@ -990,14 +989,14 @@ export function setupEventListeners(elements, dataElements, state, mapCanvas, ma
                 }
             });
 
-            const editBtn = item.querySelector('.zone-edit-btn');
-            editBtn.addEventListener('click', function (e) {
+            const editBtn = item.querySelector('.zone-edit-btn')! as HTMLElement;
+            editBtn.addEventListener('click', function (e: MouseEvent) {
                 e.stopPropagation();
                 openZoneEditor(zone, elements);
             });
 
-            const deleteBtn = item.querySelector('.zone-delete-btn');
-            deleteBtn.addEventListener('click', function (e) {
+            const deleteBtn = item.querySelector('.zone-delete-btn')! as HTMLElement;
+            deleteBtn.addEventListener('click', function (e: MouseEvent) {
                 e.stopPropagation();
                 if (zones.length <= 1) {
                     alert('至少需要保留一个圈层！');
@@ -1009,11 +1008,11 @@ export function setupEventListeners(elements, dataElements, state, mapCanvas, ma
                 }
             });
 
-            elements.zoneList.appendChild(item);
+            elements.zoneList!.appendChild(item);
         });
     }
 
-    function refreshAllZoneRelated(state, elements, mapCtx, mapWrapper, dataElements) {
+    function refreshAllZoneRelated(state: AppState, elements: ControlElements, mapCtx: CanvasRenderingContext2D, mapWrapper: HTMLElement, dataElements: DataElements): void {
         updateAllCalculations(state);
         generateDataPanels(dataElements);
         generateLegend(dataElements);
@@ -1022,61 +1021,61 @@ export function setupEventListeners(elements, dataElements, state, mapCanvas, ma
         refreshZoneList(state, elements, mapCtx, mapWrapper, dataElements);
     }
 
-    function openZoneEditor(zone, elements) {
+    function openZoneEditor(zone: ZoneDef | null, elements: ControlElements): void {
         editingZoneKey = zone ? zone.key : null;
 
         if (zone) {
-            elements.zoneEditorTitle.textContent = '编辑圈层: ' + zone.label;
-            elements.zoneKey.value = zone.key;
-            elements.zoneLabel.value = zone.label;
+            elements.zoneEditorTitle!.textContent = '编辑圈层: ' + zone.label;
+            (elements.zoneKey as HTMLInputElement)!.value = zone.key;
+            (elements.zoneLabel as HTMLInputElement)!.value = zone.label;
             const colorHex = rgbToHex(zone.color[0], zone.color[1], zone.color[2]);
-            elements.zoneColor.value = colorHex;
-            elements.zoneColorText.value = colorHex;
-            elements.zoneDescription.value = zone.description || '';
-            elements.zoneMinRadius.value = zone.minRadius || 0.5;
-            elements.zoneRadiusFormula.value = zone.radiusFormula || '';
-            elements.zoneHeightFactor.value = zone.heightFactorType || 'height';
-            elements.zoneDash.value = typeof zone.dash === 'string' ? zone.dash : (zone.dash ? 'dashed4' : 'solid');
-            elements.zoneOverpressure.value = zone.overpressureThreshold || 5;
-            elements.zoneAltitudeSens.value = zone.altitudeSensitivity || 0.3;
-            elements.zoneAltitudeSensValue.textContent = (zone.altitudeSensitivity || 0.3).toFixed(2);
-            elements.zoneDestroyed.checked = zone.casualtyRates ? zone.casualtyRates.destroyed : false;
-            elements.zoneDeathRate.value = zone.casualtyRates ? zone.casualtyRates.deaths : 0.1;
-            elements.zoneDeathRateValue.textContent = (zone.casualtyRates ? zone.casualtyRates.deaths : 0.1).toFixed(2);
-            elements.zoneInjuryRate.value = zone.casualtyRates ? zone.casualtyRates.injured : 0.2;
-            elements.zoneInjuryRateValue.textContent = (zone.casualtyRates ? zone.casualtyRates.injured : 0.2).toFixed(2);
+            (elements.zoneColor as HTMLInputElement)!.value = colorHex;
+            (elements.zoneColorText as HTMLInputElement)!.value = colorHex;
+            (elements.zoneDescription as HTMLTextAreaElement)!.value = zone.description || '';
+            (elements.zoneMinRadius as HTMLInputElement)!.value = String(zone.minRadius || 0.5);
+            (elements.zoneRadiusFormula as HTMLInputElement)!.value = zone.radiusFormula || '';
+            (elements.zoneHeightFactor as HTMLSelectElement)!.value = zone.heightFactorType || 'height';
+            (elements.zoneDash as HTMLSelectElement)!.value = typeof zone.dash === 'string' ? zone.dash : (zone.dash ? 'dashed4' : 'solid');
+            (elements.zoneOverpressure as HTMLInputElement)!.value = String(zone.overpressureThreshold || 5);
+            (elements.zoneAltitudeSens as HTMLInputElement)!.value = String(zone.altitudeSensitivity || 0.3);
+            elements.zoneAltitudeSensValue!.textContent = (zone.altitudeSensitivity || 0.3).toFixed(2);
+            (elements.zoneDestroyed as HTMLInputElement)!.checked = zone.casualtyRates ? zone.casualtyRates.destroyed : false;
+            (elements.zoneDeathRate as HTMLInputElement)!.value = String(zone.casualtyRates ? zone.casualtyRates.deaths : 0.1);
+            elements.zoneDeathRateValue!.textContent = (zone.casualtyRates ? zone.casualtyRates.deaths : 0.1).toFixed(2);
+            (elements.zoneInjuryRate as HTMLInputElement)!.value = String(zone.casualtyRates ? zone.casualtyRates.injured : 0.2);
+            elements.zoneInjuryRateValue!.textContent = (zone.casualtyRates ? zone.casualtyRates.injured : 0.2).toFixed(2);
         } else {
-            elements.zoneEditorTitle.textContent = '新增圈层';
-            elements.zoneKey.value = '';
-            elements.zoneLabel.value = '';
-            elements.zoneColor.value = '#ff6600';
-            elements.zoneColorText.value = '#ff6600';
-            elements.zoneDescription.value = '';
-            elements.zoneMinRadius.value = 0.5;
-            elements.zoneRadiusFormula.value = '1.0 * Math.pow(W, 0.4)';
-            elements.zoneHeightFactor.value = 'height';
-            elements.zoneDash.value = 'solid';
-            elements.zoneOverpressure.value = 5;
-            elements.zoneAltitudeSens.value = 0.3;
-            elements.zoneAltitudeSensValue.textContent = '0.30';
-            elements.zoneDestroyed.checked = false;
-            elements.zoneDeathRate.value = 0.1;
-            elements.zoneDeathRateValue.textContent = '0.10';
-            elements.zoneInjuryRate.value = 0.2;
-            elements.zoneInjuryRateValue.textContent = '0.20';
+            elements.zoneEditorTitle!.textContent = '新增圈层';
+            (elements.zoneKey as HTMLInputElement)!.value = '';
+            (elements.zoneLabel as HTMLInputElement)!.value = '';
+            (elements.zoneColor as HTMLInputElement)!.value = '#ff6600';
+            (elements.zoneColorText as HTMLInputElement)!.value = '#ff6600';
+            (elements.zoneDescription as HTMLTextAreaElement)!.value = '';
+            (elements.zoneMinRadius as HTMLInputElement)!.value = '0.5';
+            (elements.zoneRadiusFormula as HTMLInputElement)!.value = '1.0 * Math.pow(W, 0.4)';
+            (elements.zoneHeightFactor as HTMLSelectElement)!.value = 'height';
+            (elements.zoneDash as HTMLSelectElement)!.value = 'solid';
+            (elements.zoneOverpressure as HTMLInputElement)!.value = '5';
+            (elements.zoneAltitudeSens as HTMLInputElement)!.value = '0.3';
+            elements.zoneAltitudeSensValue!.textContent = '0.30';
+            (elements.zoneDestroyed as HTMLInputElement)!.checked = false;
+            (elements.zoneDeathRate as HTMLInputElement)!.value = '0.1';
+            elements.zoneDeathRateValue!.textContent = '0.10';
+            (elements.zoneInjuryRate as HTMLInputElement)!.value = '0.2';
+            elements.zoneInjuryRateValue!.textContent = '0.20';
         }
 
-        elements.zoneEditorModal.style.display = 'flex';
+        elements.zoneEditorModal!.style.display = 'flex';
     }
 
-    function closeZoneEditor(elements) {
-        elements.zoneEditorModal.style.display = 'none';
+    function closeZoneEditor(elements: ControlElements): void {
+        elements.zoneEditorModal!.style.display = 'none';
         editingZoneKey = null;
     }
 
-    function handleZoneSave(state, elements, mapCtx, mapWrapper, dataElements) {
-        const key = elements.zoneKey.value.trim();
-        const label = elements.zoneLabel.value.trim();
+    function handleZoneSave(state: AppState, elements: ControlElements, mapCtx: CanvasRenderingContext2D, mapWrapper: HTMLElement, dataElements: DataElements): void {
+        const key = (elements.zoneKey as HTMLInputElement)!.value.trim();
+        const label = (elements.zoneLabel as HTMLInputElement)!.value.trim();
 
         if (!key || !label) {
             alert('圈层标识和名称不能为空！');
@@ -1088,7 +1087,7 @@ export function setupEventListeners(elements, dataElements, state, mapCanvas, ma
             return;
         }
 
-        const colorMatch = elements.zoneColorText.value.match(/^#?([0-9a-f]{6})$/i);
+        const colorMatch = (elements.zoneColorText as HTMLInputElement)!.value.match(/^#?([0-9a-f]{6})$/i);
         if (!colorMatch) {
             alert('请输入有效的颜色值（如 #ff0000）！');
             return;
@@ -1101,28 +1100,28 @@ export function setupEventListeners(elements, dataElements, state, mapCanvas, ma
             parseInt(colorHex.substr(4, 2), 16)
         ];
 
-        let dashValue = elements.zoneDash.value;
+        let dashValue: string | null = (elements.zoneDash as HTMLSelectElement)!.value;
         if (dashValue === 'solid') dashValue = null;
 
-        const zoneDef = {
+        const zoneDef: ZoneDef = {
             key: key,
             label: label,
             color: color,
-            description: elements.zoneDescription.value.trim(),
-            minRadius: parseFloat(elements.zoneMinRadius.value) || 0.1,
-            radiusFormula: elements.zoneRadiusFormula.value.trim(),
-            heightFactorType: elements.zoneHeightFactor.value,
+            description: (elements.zoneDescription as HTMLTextAreaElement)!.value.trim(),
+            minRadius: parseFloat((elements.zoneMinRadius as HTMLInputElement)!.value) || 0.1,
+            radiusFormula: (elements.zoneRadiusFormula as HTMLInputElement)!.value.trim(),
+            heightFactorType: (elements.zoneHeightFactor as HTMLSelectElement)!.value,
             dash: dashValue,
-            overpressureThreshold: parseFloat(elements.zoneOverpressure.value) || 0,
-            altitudeSensitivity: parseFloat(elements.zoneAltitudeSens.value) || 0,
+            overpressureThreshold: parseFloat((elements.zoneOverpressure as HTMLInputElement)!.value) || 0,
+            altitudeSensitivity: parseFloat((elements.zoneAltitudeSens as HTMLInputElement)!.value) || 0,
             casualtyRates: {
-                deaths: parseFloat(elements.zoneDeathRate.value) || 0,
-                injured: parseFloat(elements.zoneInjuryRate.value) || 0,
-                destroyed: elements.zoneDestroyed.checked
+                deaths: parseFloat((elements.zoneDeathRate as HTMLInputElement)!.value) || 0,
+                injured: parseFloat((elements.zoneInjuryRate as HTMLInputElement)!.value) || 0,
+                destroyed: (elements.zoneDestroyed as HTMLInputElement)!.checked
             }
         };
 
-        let result;
+        let result: ZoneOperationResult;
         if (editingZoneKey) {
             result = updateZone(editingZoneKey, zoneDef);
         } else {
@@ -1177,33 +1176,33 @@ export function setupEventListeners(elements, dataElements, state, mapCanvas, ma
     }
 
     if (elements.zoneColor && elements.zoneColorText) {
-        elements.zoneColor.addEventListener('input', function () {
-            elements.zoneColorText.value = elements.zoneColor.value;
+        (elements.zoneColor as HTMLInputElement).addEventListener('input', function () {
+            (elements.zoneColorText as HTMLInputElement).value = (elements.zoneColor as HTMLInputElement).value;
         });
-        elements.zoneColorText.addEventListener('input', function () {
-            if (/^#?[0-9a-f]{6}$/i.test(elements.zoneColorText.value)) {
-                elements.zoneColor.value = elements.zoneColorText.value.startsWith('#')
-                    ? elements.zoneColorText.value
-                    : '#' + elements.zoneColorText.value;
+        (elements.zoneColorText as HTMLInputElement).addEventListener('input', function () {
+            if (/^#?[0-9a-f]{6}$/i.test((elements.zoneColorText as HTMLInputElement).value)) {
+                (elements.zoneColor as HTMLInputElement).value = (elements.zoneColorText as HTMLInputElement).value.startsWith('#')
+                    ? (elements.zoneColorText as HTMLInputElement).value
+                    : '#' + (elements.zoneColorText as HTMLInputElement).value;
             }
         });
     }
 
     if (elements.zoneAltitudeSens && elements.zoneAltitudeSensValue) {
-        elements.zoneAltitudeSens.addEventListener('input', function () {
-            elements.zoneAltitudeSensValue.textContent = parseFloat(elements.zoneAltitudeSens.value).toFixed(2);
+        (elements.zoneAltitudeSens as HTMLInputElement).addEventListener('input', function () {
+            elements.zoneAltitudeSensValue!.textContent = parseFloat((elements.zoneAltitudeSens as HTMLInputElement).value).toFixed(2);
         });
     }
 
     if (elements.zoneDeathRate && elements.zoneDeathRateValue) {
-        elements.zoneDeathRate.addEventListener('input', function () {
-            elements.zoneDeathRateValue.textContent = parseFloat(elements.zoneDeathRate.value).toFixed(2);
+        (elements.zoneDeathRate as HTMLInputElement).addEventListener('input', function () {
+            elements.zoneDeathRateValue!.textContent = parseFloat((elements.zoneDeathRate as HTMLInputElement).value).toFixed(2);
         });
     }
 
     if (elements.zoneInjuryRate && elements.zoneInjuryRateValue) {
-        elements.zoneInjuryRate.addEventListener('input', function () {
-            elements.zoneInjuryRateValue.textContent = parseFloat(elements.zoneInjuryRate.value).toFixed(2);
+        (elements.zoneInjuryRate as HTMLInputElement).addEventListener('input', function () {
+            elements.zoneInjuryRateValue!.textContent = parseFloat((elements.zoneInjuryRate as HTMLInputElement).value).toFixed(2);
         });
     }
 

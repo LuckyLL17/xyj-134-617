@@ -1,13 +1,14 @@
-import { rgba, hexToRgba } from './data-display.js';
-import { calculateRadii, calculateShockwaveRadiusAtAngle, generateTerrainBoundaryPolygon } from './physics.js';
-import { getZoneColors, drawPolygonPathFromPoints, drawMap } from './renderer.js';
-import { initAudio, playFlashSound, playExplosionSound, playShockwaveSound, playQuakeSound, playDebrisSound } from './audio.js';
-import { startTimelineMode } from './timeline.js';
+import type { AppState, AnimState, Particle, Debris, RgbaColor, ControlElements, TerrainBoundaryPoint, Explosion } from '../types/index.ts';
+import { rgba, hexToRgba } from './data-display.ts';
+import { calculateRadii, calculateShockwaveRadiusAtAngle, generateTerrainBoundaryPolygon } from './physics.ts';
+import { getZoneColors, drawPolygonPathFromPoints, drawMap } from './renderer.ts';
+import { initAudio, playFlashSound, playExplosionSound, playShockwaveSound, playQuakeSound, playDebrisSound } from './audio.ts';
+import { startTimelineMode } from './timeline.ts';
 
 const SHOCKWAVE_SPEED_KM_S = 2.5;
 const TOTAL_ANIM_DURATION = 6000;
 
-function parseRgba(rgbaStr) {
+function parseRgba(rgbaStr: string): RgbaColor {
     const match = rgbaStr.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,?\s*([\d.]+)?\s*\)/);
     if (match) {
         return {
@@ -20,29 +21,29 @@ function parseRgba(rgbaStr) {
     return { r: 255, g: 255, b: 255, a: 1 };
 }
 
-function createExplosionAnimState(explosion, index, scale, terrain) {
-    let cx = explosion.explosionCenter.x;
-    let cy = explosion.explosionCenter.y;
-    let radii = explosion.radii;
-    let safeScale = scale;
+function createExplosionAnimState(explosion: any, index: number, scale: number, terrain: any): AnimState {
+    let cx: number = explosion.explosionCenter.x;
+    let cy: number = explosion.explosionCenter.y;
+    let radii: Record<string, number> = explosion.radii;
+    let safeScale: number = scale;
 
     if (!isFinite(cx)) cx = 400;
     if (!isFinite(cy)) cy = 300;
     if (!isFinite(safeScale) || safeScale <= 0) safeScale = 20;
 
     if (!radii || !isFinite(radii.fireball)) {
-        const yieldKt = explosion.yieldKilotons || 15000;
-        const burstH = explosion.burstHeight || 1000;
+        const yieldKt: number = explosion.yieldKilotons || 15000;
+        const burstH: number = explosion.burstHeight || 1000;
         radii = calculateRadii(yieldKt, burstH);
     }
 
-    Object.keys(radii).forEach(function (key) {
+    Object.keys(radii).forEach(function (key: string) {
         if (!isFinite(radii[key])) radii[key] = 1;
     });
 
-    const tint = index;
+    const tint: number = index;
 
-    const paletteColors = [
+    const paletteColors: Array<{ p1: string; p2: string; p3: string; smoke: number[] }> = [
         { p1: '#ffdd00', p2: '#ff6600', p3: '#ff0000', smoke: [140,90,50] },
         { p1: '#00ffff', p2: '#6688ff', p3: '#0044ff', smoke: [90,90,140] },
         { p1: '#ccff88', p2: '#88ff00', p3: '#00cc44', smoke: [90,130,80] },
@@ -50,14 +51,14 @@ function createExplosionAnimState(explosion, index, scale, terrain) {
     ];
     const colors = paletteColors[tint % paletteColors.length];
 
-    const particles = [];
+    const particles: Particle[] = [];
     const particleCount = 150;
     for (let i = 0; i < particleCount; i++) {
         const angle = (i / particleCount) * Math.PI * 2;
         const speed = (2 + Math.random() * 4);
         const size = 2 + Math.random() * 6;
         const colorRand = Math.random();
-        let pcolor;
+        let pcolor: string;
         if (colorRand < 0.33) pcolor = colors.p1;
         else if (colorRand < 0.66) pcolor = colors.p2;
         else pcolor = colors.p3;
@@ -73,7 +74,7 @@ function createExplosionAnimState(explosion, index, scale, terrain) {
         });
     }
 
-    const debris = [];
+    const debris: Debris[] = [];
     const debrisCount = 80;
     for (let i = 0; i < debrisCount; i++) {
         const angle = Math.random() * Math.PI * 2;
@@ -91,9 +92,9 @@ function createExplosionAnimState(explosion, index, scale, terrain) {
         });
     }
 
-    const zoneOrder = ['fireball', 'radiation', 'severe', 'moderate', 'light', 'thermal'];
-    const zoneDisplayTimes = {};
-    zoneOrder.forEach((key, idx) => {
+    const zoneOrder: string[] = ['fireball', 'radiation', 'severe', 'moderate', 'light', 'thermal'];
+    const zoneDisplayTimes: Record<string, number> = {};
+    zoneOrder.forEach((key: string, idx: number) => {
         const radius = radii[key];
         zoneDisplayTimes[key] = radius / SHOCKWAVE_SPEED_KM_S;
     });
@@ -121,7 +122,7 @@ function createExplosionAnimState(explosion, index, scale, terrain) {
         quakeStartTime: quakeStartTime,
         quakePeakTime: quakePeakTime,
         quakeEndTime: quakeEndTime,
-        displayedZones: {},
+        displayedZones: {} as Record<string, boolean>,
         soundTriggers: {
             flash: false,
             explosion: false,
@@ -133,7 +134,7 @@ function createExplosionAnimState(explosion, index, scale, terrain) {
     };
 }
 
-function drawPersistentFireball(effectCtx, a, progress) {
+function drawPersistentFireball(effectCtx: CanvasRenderingContext2D, a: AnimState, progress: number): void {
     const fbRadius = a.radii.fireball * a.scale * (1 + Math.sin(progress * Math.PI) * 0.1);
     const fbAlpha = 0.7 * (1 - progress * 0.5);
     const fbGrad = effectCtx.createRadialGradient(a.cx, a.cy, 0, a.cx, a.cy, fbRadius);
@@ -147,11 +148,11 @@ function drawPersistentFireball(effectCtx, a, progress) {
     effectCtx.fill();
 }
 
-function drawShockwaveRing(effectCtx, a, currentSW, swAlpha, terrain, scale, zoneKey) {
+function drawShockwaveRing(effectCtx: CanvasRenderingContext2D, a: AnimState, currentSW: number, swAlpha: number, terrain: any, scale: number, zoneKey: string): void {
     const useTerrain = terrain && terrain.features && terrain.features.length > 0;
     const segments = 96;
 
-    function getRadiusAtAngle(angle) {
+    function getRadiusAtAngle(angle: number): number {
         if (!useTerrain || !a.explosionRef) return currentSW;
         return calculateShockwaveRadiusAtAngle(
             a.explosionRef, angle, zoneKey, terrain, scale, currentSW
@@ -161,7 +162,7 @@ function drawShockwaveRing(effectCtx, a, currentSW, swAlpha, terrain, scale, zon
     effectCtx.beginPath();
     for (let i = 0; i <= segments; i++) {
         const angle = (i / segments) * Math.PI * 2;
-        let r;
+        let r: number;
         if (useTerrain) {
             r = getRadiusAtAngle(angle);
         } else {
@@ -172,7 +173,7 @@ function drawShockwaveRing(effectCtx, a, currentSW, swAlpha, terrain, scale, zon
         if (i === 0) effectCtx.moveTo(x, y);
         else {
             const prevAngle = ((i - 1) / segments) * Math.PI * 2;
-            let prevR;
+            let prevR: number;
             if (useTerrain) {
                 prevR = getRadiusAtAngle(prevAngle);
             } else {
@@ -188,7 +189,7 @@ function drawShockwaveRing(effectCtx, a, currentSW, swAlpha, terrain, scale, zon
     effectCtx.stroke();
 }
 
-function drawPhaseFlash(effectCtx, a, t) {
+function drawPhaseFlash(effectCtx: CanvasRenderingContext2D, a: AnimState, t: number): void {
     const p = t / 0.05;
     const fireballP = Math.min(p, 1);
     let currentFireballRadius = Math.pow(fireballP, 0.5) * a.radii.fireball * a.scale;
@@ -230,7 +231,7 @@ function drawPhaseFlash(effectCtx, a, t) {
     }
 }
 
-function drawPhaseFireball(effectCtx, a, t) {
+function drawPhaseFireball(effectCtx: CanvasRenderingContext2D, a: AnimState, t: number): void {
     const p = t / 0.3;
     drawPersistentFireball(effectCtx, a, p * 0.3);
 
@@ -268,7 +269,7 @@ function drawPhaseFireball(effectCtx, a, t) {
     }
 }
 
-function calculateShockwaveFront(a, t) {
+function calculateShockwaveFront(a: AnimState, t: number): { km: number; px: number; fraction: number } {
     const currentRadiusKm = Math.min(t * SHOCKWAVE_SPEED_KM_S, a.maxRadiusKm);
     const currentRadiusPx = currentRadiusKm * a.scale;
     return {
@@ -278,7 +279,7 @@ function calculateShockwaveFront(a, t) {
     };
 }
 
-function getQuakeIntensity(a, t) {
+function getQuakeIntensity(a: AnimState, t: number): number {
     if (t < a.quakeStartTime) return 0;
     if (t > a.quakeEndTime) return 0;
 
@@ -294,7 +295,7 @@ function getQuakeIntensity(a, t) {
     }
 }
 
-function drawZoneProgress(effectCtx, a, zoneKey, currentFrontPx, t) {
+function drawZoneProgress(effectCtx: CanvasRenderingContext2D, a: AnimState, zoneKey: string, currentFrontPx: number, t: number): void {
     const zoneRadiusPx = a.radii[zoneKey] * a.scale;
     if (currentFrontPx < zoneRadiusPx * 0.05) return;
 
@@ -310,14 +311,14 @@ function drawZoneProgress(effectCtx, a, zoneKey, currentFrontPx, t) {
             a.explosionRef, zoneKey, a.terrain, a.scale, 72
         );
         if (boundaryPoints && boundaryPoints.length > 0) {
-            const clippedPoints = boundaryPoints.map(pt => {
+            const clippedPoints = boundaryPoints.map((pt: TerrainBoundaryPoint) => {
                 const dist = Math.sqrt(Math.pow(pt.x - a.cx, 2) + Math.pow(pt.y - a.cy, 2));
                 const clipFactor = Math.min(1, visibleRadius / Math.max(1, dist));
                 return {
                     x: a.cx + (pt.x - a.cx) * clipFactor,
                     y: a.cy + (pt.y - a.cy) * clipFactor,
                     angle: pt.angle
-                };
+                } as TerrainBoundaryPoint;
             });
 
             drawPolygonPathFromPoints(effectCtx, clippedPoints, true);
@@ -349,13 +350,13 @@ function drawZoneProgress(effectCtx, a, zoneKey, currentFrontPx, t) {
     }
 }
 
-function drawRippleWave(effectCtx, a, radius, waveWidth, alpha, color) {
+function drawRippleWave(effectCtx: CanvasRenderingContext2D, a: AnimState, radius: number, waveWidth: number, alpha: number, color: RgbaColor): void {
     if (radius <= 0 || waveWidth <= 0 || alpha <= 0) return;
 
     const useTerrain = a.terrain && a.terrain.features && a.terrain.features.length > 0;
     const segments = 96;
 
-    function getRadiusAtAngle(angle, baseRadius) {
+    function getRadiusAtAngle(angle: number, baseRadius: number): number {
         if (!useTerrain || !a.explosionRef) return baseRadius;
         return calculateShockwaveRadiusAtAngle(
             a.explosionRef, angle, 'severe', a.terrain, a.scale, baseRadius
@@ -394,13 +395,13 @@ function drawRippleWave(effectCtx, a, radius, waveWidth, alpha, color) {
     effectCtx.fill();
 }
 
-function drawPhaseShockwave(effectCtx, a, t) {
+function drawPhaseShockwave(effectCtx: CanvasRenderingContext2D, a: AnimState, t: number): void {
     const shockwave = calculateShockwaveFront(a, t);
     const phaseProgress = (t - 0.3) / 1.7;
 
     drawPersistentFireball(effectCtx, a, 0.3 + phaseProgress * 0.4);
 
-    a.zoneOrder.forEach(zoneKey => {
+    a.zoneOrder.forEach((zoneKey: string) => {
         if (!a.displayedZones[zoneKey] && t >= a.zoneDisplayTimes[zoneKey] * 0.9) {
             a.displayedZones[zoneKey] = true;
         }
@@ -422,15 +423,15 @@ function drawPhaseShockwave(effectCtx, a, t) {
             if (waveRadius > 0) {
                 const waveAlpha = swAlpha * Math.max(0, 1 - i * 0.22) * (0.4 + Math.sin(t * 8 - i * 1.5) * 0.3);
                 const widthFactor = 1 + i * 0.3;
-                const waveColor = i === 0
-                    ? { r: 255, g: 240, b: 180 }
+                const waveColor: RgbaColor = i === 0
+                    ? { r: 255, g: 240, b: 180, a: 1 }
                     : i === 1
-                    ? { r: 255, g: 180, b: 100 }
+                    ? { r: 255, g: 180, b: 100, a: 1 }
                     : i === 2
-                    ? { r: 255, g: 120, b: 60 }
+                    ? { r: 255, g: 120, b: 60, a: 1 }
                     : i === 3
-                    ? { r: 220, g: 80, b: 40 }
-                    : { r: 180, g: 60, b: 30 };
+                    ? { r: 220, g: 80, b: 40, a: 1 }
+                    : { r: 180, g: 60, b: 30, a: 1 };
 
                 drawRippleWave(effectCtx, a, waveRadius, waveWidth * widthFactor, waveAlpha * 0.7, waveColor);
             }
@@ -451,7 +452,7 @@ function drawPhaseShockwave(effectCtx, a, t) {
         }
     }
 
-    a.particles.forEach(function (particle) {
+    a.particles.forEach(function (particle: Particle) {
         particle.x += particle.vx * (1 + phaseProgress * 2);
         particle.y += particle.vy * (1 + phaseProgress * 1.5);
         particle.vy += particle.gravity;
@@ -465,7 +466,7 @@ function drawPhaseShockwave(effectCtx, a, t) {
     });
 
     if (phaseProgress > 0.2) {
-        a.debris.forEach(function (d) {
+        a.debris.forEach(function (d: Debris) {
             const debrisPhase = (phaseProgress - 0.2) / 0.8;
             d.x += d.vx * (1 + debrisPhase);
             d.y += d.vy * (1 + debrisPhase * 0.8);
@@ -484,13 +485,13 @@ function drawPhaseShockwave(effectCtx, a, t) {
     }
 }
 
-function drawPhaseMushroom(effectCtx, a, t) {
+function drawPhaseMushroom(effectCtx: CanvasRenderingContext2D, a: AnimState, t: number): void {
     const phaseProgress = (t - 2.0) / 2.0;
     const mp = Math.min(1, phaseProgress);
 
     drawPersistentFireball(effectCtx, a, 0.7 + mp * 0.3);
 
-    a.zoneOrder.forEach(zoneKey => {
+    a.zoneOrder.forEach((zoneKey: string) => {
         if (a.displayedZones[zoneKey]) {
             const zoneRadiusPx = a.radii[zoneKey] * a.scale;
             const colors = getZoneColors(zoneKey, a.tintIndex);
@@ -595,7 +596,7 @@ function drawPhaseMushroom(effectCtx, a, t) {
         }
     }
 
-    a.particles.forEach(function (particle) {
+    a.particles.forEach(function (particle: Particle) {
         particle.x += particle.vx * 0.3;
         particle.y += particle.vy * 0.3;
         particle.vy += 0.02;
@@ -609,13 +610,13 @@ function drawPhaseMushroom(effectCtx, a, t) {
     });
 }
 
-function drawPhaseFadeOut(effectCtx, a, t) {
+function drawPhaseFadeOut(effectCtx: CanvasRenderingContext2D, a: AnimState, t: number): void {
     const phaseProgress = (t - 4.0) / 2.0;
     const mp = Math.min(1, phaseProgress);
 
     const fadeAlpha = Math.max(0, 1 - mp);
 
-    a.zoneOrder.forEach(zoneKey => {
+    a.zoneOrder.forEach((zoneKey: string) => {
         if (a.displayedZones[zoneKey]) {
             const zoneRadiusPx = a.radii[zoneKey] * a.scale;
             const colors = getZoneColors(zoneKey, a.tintIndex);
@@ -687,7 +688,7 @@ function drawPhaseFadeOut(effectCtx, a, t) {
     effectCtx.fill();
 }
 
-function applyEarthquakeShake(ctx, width, height, totalQuakeIntensity, time) {
+function applyEarthquakeShake(ctx: CanvasRenderingContext2D, width: number, height: number, totalQuakeIntensity: number, time: number): void {
     if (totalQuakeIntensity <= 0) return;
 
     const maxShake = 12 * totalQuakeIntensity;
@@ -701,12 +702,12 @@ function applyEarthquakeShake(ctx, width, height, totalQuakeIntensity, time) {
     ctx.translate(-width / 2, -height / 2);
 }
 
-function restoreFromEarthquake(ctx) {
+function restoreFromEarthquake(ctx: CanvasRenderingContext2D): void {
     ctx.restore();
 }
 
-function triggerSounds(animStates, tSeconds, intensity) {
-    animStates.forEach(a => {
+function triggerSounds(animStates: AnimState[], tSeconds: number, intensity: number): void {
+    animStates.forEach((a: AnimState) => {
         if (!a.soundTriggers.flash && tSeconds >= 0) {
             a.soundTriggers.flash = true;
             playFlashSound();
@@ -739,15 +740,15 @@ function triggerSounds(animStates, tSeconds, intensity) {
     });
 }
 
-export function animateExplosion(effectCtx, effectCanvas, mapWrapper, state, elements, flashOverlay) {
+export function animateExplosion(effectCtx: CanvasRenderingContext2D, effectCanvas: HTMLCanvasElement, mapWrapper: HTMLElement, state: AppState, elements: ControlElements, flashOverlay: HTMLElement): void {
     if (state.isAnimating) return;
 
-    const activeExplosions = state.explosions.filter(function (e) {
+    const activeExplosions = state.explosions.filter(function (e: Explosion) {
         return e.explosionCenter && e.radii && e.radii.fireball && isFinite(e.radii.fireball);
     });
     if (activeExplosions.length === 0) return;
 
-    activeExplosions.forEach(function (e) {
+    activeExplosions.forEach(function (e: Explosion) {
         if (!e.yieldKilotons) e.yieldKilotons = 15000;
         if (!e.radii || !isFinite(e.radii.fireball)) {
             e.radii = calculateRadii(e.yieldKilotons, e.burstHeight || 1000);
@@ -755,9 +756,9 @@ export function animateExplosion(effectCtx, effectCanvas, mapWrapper, state, ele
     });
 
     state.isAnimating = true;
-    elements.detonateBtn.disabled = true;
+    (elements.detonateBtn as HTMLButtonElement).disabled = true;
 
-    drawMap(state.mapCtx, mapWrapper, state);
+    drawMap(state.mapCtx!, mapWrapper, state);
 
     initAudio();
 
@@ -767,17 +768,17 @@ export function animateExplosion(effectCtx, effectCanvas, mapWrapper, state, ele
     const width = rect.width;
     const height = rect.height;
 
-    const animStates = activeExplosions.map(function (exp, idx) {
+    const animStates: AnimState[] = activeExplosions.map(function (exp: Explosion, idx: number) {
         return createExplosionAnimState(exp, idx, state.scale, state.terrainData);
     });
 
-    const totalYield = activeExplosions.reduce((sum, e) => sum + (e.yieldKilotons || 15000), 0);
+    const totalYield = activeExplosions.reduce((sum: number, e: Explosion) => sum + (e.yieldKilotons || 15000), 0);
     const intensity = Math.min(1, totalYield / 50000);
 
     const startTime = performance.now();
     let earthquakeActive = false;
 
-    function draw(now) {
+    function draw(now: number): void {
         const elapsed = now - startTime;
         const tSeconds = elapsed / 1000;
         const progress = Math.min(elapsed / TOTAL_ANIM_DURATION, 1);
@@ -787,28 +788,28 @@ export function animateExplosion(effectCtx, effectCanvas, mapWrapper, state, ele
         triggerSounds(animStates, tSeconds, intensity);
 
         let totalQuakeIntensity = 0;
-        animStates.forEach(a => {
+        animStates.forEach((a: AnimState) => {
             totalQuakeIntensity = Math.max(totalQuakeIntensity, getQuakeIntensity(a, tSeconds));
         });
 
         if (totalQuakeIntensity > 0.05) {
-            applyEarthquakeShake(state.mapCtx, width, height, totalQuakeIntensity, tSeconds);
-            drawMap(state.mapCtx, mapWrapper, state);
-            restoreFromEarthquake(state.mapCtx);
+            applyEarthquakeShake(state.mapCtx!, width, height, totalQuakeIntensity, tSeconds);
+            drawMap(state.mapCtx!, mapWrapper, state);
+            restoreFromEarthquake(state.mapCtx!);
         } else {
-            drawMap(state.mapCtx, mapWrapper, state);
+            drawMap(state.mapCtx!, mapWrapper, state);
         }
 
         if (progress <= 0.05) {
-            animStates.forEach(function (a) { drawPhaseFlash(effectCtx, a, tSeconds); });
+            animStates.forEach(function (a: AnimState) { drawPhaseFlash(effectCtx, a, tSeconds); });
         } else if (progress <= 0.3) {
-            animStates.forEach(function (a) { drawPhaseFireball(effectCtx, a, tSeconds); });
+            animStates.forEach(function (a: AnimState) { drawPhaseFireball(effectCtx, a, tSeconds); });
         } else if (progress <= 2.0) {
-            animStates.forEach(function (a) { drawPhaseShockwave(effectCtx, a, tSeconds); });
+            animStates.forEach(function (a: AnimState) { drawPhaseShockwave(effectCtx, a, tSeconds); });
         } else if (progress <= 4.0) {
-            animStates.forEach(function (a) { drawPhaseMushroom(effectCtx, a, tSeconds); });
+            animStates.forEach(function (a: AnimState) { drawPhaseMushroom(effectCtx, a, tSeconds); });
         } else {
-            animStates.forEach(function (a) { drawPhaseFadeOut(effectCtx, a, tSeconds); });
+            animStates.forEach(function (a: AnimState) { drawPhaseFadeOut(effectCtx, a, tSeconds); });
         }
 
         if (progress < 1) {
@@ -816,10 +817,10 @@ export function animateExplosion(effectCtx, effectCanvas, mapWrapper, state, ele
         } else {
             setTimeout(function () {
                 state.isAnimating = false;
-                elements.detonateBtn.disabled = false;
+                (elements.detonateBtn as HTMLButtonElement).disabled = false;
                 flashOverlay.classList.remove('active');
 
-                drawMap(state.mapCtx, mapWrapper, state);
+                drawMap(state.mapCtx!, mapWrapper, state);
 
                 startTimelineMode(state, effectCtx, effectCanvas);
             }, 800);

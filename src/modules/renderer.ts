@@ -1,11 +1,12 @@
-import { rgba } from './data-display.js';
-import { getZones, generateCities, generateRoads, getElevationAt, TERRAIN_FEATURE_TYPES, generateTerrainBoundaryPolygon, calculateShockwaveRadiusAtAngle, BUILDING_TYPES, BUILDING_TYPE_ORDER } from './physics.js';
+import type { AppState, TerrainBoundaryPoint, ZoneDef, TerrainData, City } from '../types/index.js';
+import { rgba } from './data-display.ts';
+import { getZones, generateCities, generateRoads, getElevationAt, TERRAIN_FEATURE_TYPES, generateTerrainBoundaryPolygon, calculateShockwaveRadiusAtAngle, BUILDING_TYPES, BUILDING_TYPE_ORDER } from './physics.ts';
 
-export function getZoneDefs() {
+export function getZoneDefs(): ZoneDef[] {
     return getZones();
 }
 
-export function getZoneColors(key, tintIndex) {
+export function getZoneColors(key: string, tintIndex: number): { fill: string; border: string } {
     const zones = getZoneDefs();
     const zone = zones.find(function (z) { return z.key === key; });
     let baseColor = zone && zone.color ? zone.color : [128, 128, 128];
@@ -29,7 +30,7 @@ export function getZoneColors(key, tintIndex) {
     };
 }
 
-export function setupCanvas(mapCanvas, effectCanvas, mapCtx, effectCtx, mapWrapper, state) {
+export function setupCanvas(mapCanvas: HTMLCanvasElement, effectCanvas: HTMLCanvasElement | null, mapCtx: CanvasRenderingContext2D, effectCtx: CanvasRenderingContext2D | null, mapWrapper: HTMLElement, state: AppState): void {
     const rect = mapWrapper.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
 
@@ -39,7 +40,7 @@ export function setupCanvas(mapCanvas, effectCanvas, mapCtx, effectCtx, mapWrapp
     mapCanvas.style.height = rect.height + 'px';
     mapCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    if (effectCanvas) {
+    if (effectCanvas && effectCtx) {
         effectCanvas.width = rect.width * dpr;
         effectCanvas.height = rect.height * dpr;
         effectCanvas.style.width = rect.width + 'px';
@@ -54,7 +55,7 @@ export function setupCanvas(mapCanvas, effectCanvas, mapCtx, effectCtx, mapWrapp
     drawMap(mapCtx, mapWrapper, state);
 }
 
-export function drawMap(mapCtx, mapWrapper, state) {
+export function drawMap(mapCtx: CanvasRenderingContext2D, mapWrapper: HTMLElement, state: AppState): void {
     const rect = mapWrapper.getBoundingClientRect();
     const width = rect.width;
     const height = rect.height;
@@ -91,7 +92,7 @@ export function drawMap(mapCtx, mapWrapper, state) {
     }
 }
 
-function drawTerrain(mapCtx, width, height) {
+function drawTerrain(mapCtx: CanvasRenderingContext2D, width: number, height: number): void {
     const gradient = mapCtx.createRadialGradient(
         width / 2, height / 2, 0,
         width / 2, height / 2, Math.max(width, height) * 0.7
@@ -123,7 +124,7 @@ function drawTerrain(mapCtx, width, height) {
     mapCtx.globalAlpha = 1;
 }
 
-function getTerrainColor(elevation) {
+function getTerrainColor(elevation: number): { r: number; g: number; b: number } {
     if (elevation <= -100) {
         return { r: 30, g: 50, b: 90 };
     } else if (elevation <= 0) {
@@ -171,7 +172,7 @@ function getTerrainColor(elevation) {
     }
 }
 
-function drawTerrainHeatmap(mapCtx, width, height, terrain) {
+function drawTerrainHeatmap(mapCtx: CanvasRenderingContext2D, width: number, height: number, terrain: TerrainData | null): void {
     if (!terrain || !terrain.features || terrain.features.length === 0) return;
 
     const step = 8;
@@ -241,7 +242,7 @@ function drawTerrainHeatmap(mapCtx, width, height, terrain) {
     });
 }
 
-function drawTerrainContours(mapCtx, width, height, terrain) {
+function drawTerrainContours(mapCtx: CanvasRenderingContext2D, width: number, height: number, terrain: TerrainData | null): void {
     if (!terrain || !terrain.features || terrain.features.length === 0) return;
 
     const contourLevels = [300, 600, 1000, 1500, 2500, 4000];
@@ -268,7 +269,7 @@ function drawTerrainContours(mapCtx, width, height, terrain) {
                 const e2 = getElevationAt(x + step, y + step, terrain);
                 const e3 = getElevationAt(x, y + step, terrain);
 
-                let crossings = [];
+                let crossings: { x: number; y: number }[] = [];
                 const pairs = [
                     [e0, e1, x, y, x + step, y],
                     [e1, e2, x + step, y, x + step, y + step],
@@ -298,7 +299,8 @@ function drawTerrainContours(mapCtx, width, height, terrain) {
 
     const FEATURE_TYPES = TERRAIN_FEATURE_TYPES;
     terrain.features.forEach(function (f) {
-        let label, color;
+        let label: string;
+        let color: string;
         if (f.type === FEATURE_TYPES.MOUNTAIN && f.height > 1500) {
             label = '▲ ' + Math.round(f.height) + 'm';
             color = rgba(220, 220, 255, 0.7);
@@ -321,7 +323,7 @@ function drawTerrainContours(mapCtx, width, height, terrain) {
     });
 }
 
-export function drawPolygonPathFromPoints(ctx, points, close) {
+export function drawPolygonPathFromPoints(ctx: CanvasRenderingContext2D, points: TerrainBoundaryPoint[] | null, close?: boolean): void {
     if (!points || points.length === 0) return;
     ctx.beginPath();
     ctx.moveTo(points[0].x, points[0].y);
@@ -342,7 +344,7 @@ export function drawPolygonPathFromPoints(ctx, points, close) {
     }
 }
 
-function drawGrid(mapCtx, width, height, scale) {
+function drawGrid(mapCtx: CanvasRenderingContext2D, width: number, height: number, scale: number): void {
     const step = scale * 5;
 
     mapCtx.strokeStyle = rgba(255, 255, 255, 0.04);
@@ -387,7 +389,7 @@ function drawGrid(mapCtx, width, height, scale) {
     }
 }
 
-function drawWaterBodies(mapCtx, width, height) {
+function drawWaterBodies(mapCtx: CanvasRenderingContext2D, width: number, height: number): void {
     mapCtx.fillStyle = rgba(40, 60, 90, 0.6);
 
     mapCtx.beginPath();
@@ -410,7 +412,7 @@ function drawWaterBodies(mapCtx, width, height) {
     mapCtx.stroke();
 }
 
-function drawRoadsLayer(mapCtx, width, height, cities) {
+function drawRoadsLayer(mapCtx: CanvasRenderingContext2D, width: number, height: number, cities: City[]): void {
     const roads = generateRoads(width, height, cities);
     mapCtx.strokeStyle = rgba(150, 140, 100, 0.25);
     mapCtx.lineWidth = 2;
@@ -423,9 +425,9 @@ function drawRoadsLayer(mapCtx, width, height, cities) {
     });
 }
 
-function drawEvacuationRoads(mapCtx, state) {
-    const roadDensities = state.evacuationPlan.roadDensities;
-    const nodes = state.evacuationPlan.graph.nodes;
+function drawEvacuationRoads(mapCtx: CanvasRenderingContext2D, state: AppState): void {
+    const roadDensities = state.evacuationPlan!.roadDensities;
+    const nodes = state.evacuationPlan!.graph.nodes;
 
     roadDensities.forEach(function (rd) {
         const edge = rd.edge;
@@ -436,8 +438,8 @@ function drawEvacuationRoads(mapCtx, state) {
 
         if (!fromNode || !toNode) return;
 
-        let color;
-        let lineWidth;
+        let color: string;
+        let lineWidth: number;
 
         if (density < 0.3) {
             color = rgba(100, 200, 100, 0.6);
@@ -466,9 +468,9 @@ function drawEvacuationRoads(mapCtx, state) {
     drawEvacuationArrows(mapCtx, state);
 }
 
-function drawEvacuationArrows(mapCtx, state) {
-    const cityPlans = state.evacuationPlan.cityPlans;
-    const nodes = state.evacuationPlan.graph.nodes;
+function drawEvacuationArrows(mapCtx: CanvasRenderingContext2D, state: AppState): void {
+    const cityPlans = state.evacuationPlan!.cityPlans;
+    const nodes = state.evacuationPlan!.graph.nodes;
 
     cityPlans.forEach(function (plan) {
         if (!plan.path || plan.path.length === 0 || plan.evacuated <= 0) return;
@@ -506,7 +508,7 @@ function drawEvacuationArrows(mapCtx, state) {
     });
 }
 
-function drawSheltersOnMap(mapCtx, state) {
+function drawSheltersOnMap(mapCtx: CanvasRenderingContext2D, state: AppState): void {
     state.shelters.forEach(function (shelter, idx) {
         const x = shelter.x;
         const y = shelter.y;
@@ -572,13 +574,13 @@ function drawSheltersOnMap(mapCtx, state) {
     mapCtx.textBaseline = 'alphabetic';
 }
 
-function formatCapacity(cap) {
+function formatCapacity(cap: number): string {
     if (cap >= 1000000) return (cap / 1000000).toFixed(1) + 'M 人';
     if (cap >= 1000) return (cap / 1000).toFixed(0) + 'K 人';
     return cap + ' 人';
 }
 
-function drawCities(mapCtx, state) {
+function drawCities(mapCtx: CanvasRenderingContext2D, state: AppState): void {
     state.cities.forEach(function (city, index) {
         const isCentral = index === 0;
         const size = city.size;
@@ -645,7 +647,7 @@ function drawCities(mapCtx, state) {
     });
 }
 
-function drawExplosionZones(mapCtx, width, height, state) {
+function drawExplosionZones(mapCtx: CanvasRenderingContext2D, width: number, height: number, state: AppState): void {
     if (!state.explosions || state.explosions.length === 0) return;
 
     state.explosions.forEach(function (exp, index) {
@@ -662,9 +664,9 @@ function drawExplosionZones(mapCtx, width, height, state) {
     });
 }
 
-export function getOverlayHatchColors() {
+export function getOverlayHatchColors(): Record<string, { line: string; fill: string; angle: number; spacing: number }> {
     const zones = getZoneDefs();
-    const result = {};
+    const result: Record<string, { line: string; fill: string; angle: number; spacing: number }> = {};
     const angles = [Math.PI / 5, -Math.PI / 5, Math.PI / 4, -Math.PI / 4, Math.PI / 3, 0, Math.PI / 6, -Math.PI / 6];
     const spacings = [9, 9, 8, 7, 7, 6, 8, 7];
 
@@ -683,7 +685,19 @@ export function getOverlayHatchColors() {
     return result;
 }
 
-const OVERLAP_LEVEL_STYLES = {
+interface OverlapLevelStyle {
+    fillBase: string[];
+    hatch2: boolean;
+    lineAlpha: number;
+    lineWidth: number;
+    spacing2: number;
+    outline: boolean;
+    outlineColor: string;
+    outlineWidth: number;
+    label: string;
+}
+
+const OVERLAP_LEVEL_STYLES: Record<number, OverlapLevelStyle | null> = {
     2: null,
     3: {
         fillBase: [
@@ -723,11 +737,11 @@ const OVERLAP_LEVEL_STYLES = {
     }
 };
 
-function generateCombinations(arr, k) {
-    const result = [];
+function generateCombinations(arr: any[], k: number): any[][] {
+    const result: any[][] = [];
     const n = arr.length;
     if (k > n) return result;
-    const idx = [];
+    const idx: number[] = [];
     for (let i = 0; i < k; i++) idx.push(i);
     while (true) {
         result.push(idx.map(function (i) { return arr[i]; }));
@@ -740,7 +754,7 @@ function generateCombinations(arr, k) {
     return result;
 }
 
-function drawMultiCircleOverlap(ctx, circles, zoneIndex, level) {
+function drawMultiCircleOverlap(ctx: CanvasRenderingContext2D, circles: { cx: number; cy: number; r: number }[], zoneIndex: number, level: number): void {
     const cw = ctx.canvas.width / (window.devicePixelRatio || 1);
     const ch = ctx.canvas.height / (window.devicePixelRatio || 1);
     const diag = Math.sqrt(cw * cw + ch * ch);
@@ -825,7 +839,7 @@ function drawMultiCircleOverlap(ctx, circles, zoneIndex, level) {
     }
 }
 
-function buildCircleIntersectionPath(ctx, x1, y1, r1, x2, y2, r2) {
+function buildCircleIntersectionPath(ctx: CanvasRenderingContext2D, x1: number, y1: number, r1: number, x2: number, y2: number, r2: number): boolean {
     const dx = x2 - x1;
     const dy = y2 - y1;
     const d = Math.sqrt(dx * dx + dy * dy);
@@ -865,7 +879,7 @@ function buildCircleIntersectionPath(ctx, x1, y1, r1, x2, y2, r2) {
     return true;
 }
 
-function drawHatchInsidePath(ctx, style) {
+function drawHatchInsidePath(ctx: CanvasRenderingContext2D, style: { line: string; angle: number; spacing: number }): void {
     ctx.save();
     ctx.clip();
 
@@ -895,13 +909,13 @@ function drawHatchInsidePath(ctx, style) {
     ctx.restore();
 }
 
-export function drawAllOverlapHighlights(mapCtx, state) {
-    const scaled = [];
+export function drawAllOverlapHighlights(mapCtx: CanvasRenderingContext2D, state: AppState): void {
+    const scaled: { cx: number; cy: number; r: Record<string, number> }[] = [];
     state.explosions.forEach(function (exp) {
         if (!exp.explosionCenter || !exp.radii) return;
-        const circles = {};
+        const circles: Record<string, number> = {};
         getZoneDefs().forEach(function (zone) {
-            circles[zone.key] = exp.radii[zone.key] * state.scale;
+            circles[zone.key] = exp.radii![zone.key] * state.scale;
         });
         scaled.push({ cx: exp.explosionCenter.x, cy: exp.explosionCenter.y, r: circles });
     });
@@ -921,7 +935,7 @@ export function drawAllOverlapHighlights(mapCtx, state) {
             const combos = generateCombinations(scaled, level);
             for (let ci = 0; ci < combos.length; ci++) {
                 const combo = combos[ci];
-                const circlesWithR = [];
+                const circlesWithR: { cx: number; cy: number; r: number }[] = [];
                 for (let k = 0; k < combo.length; k++) {
                     const r = combo[k].r[zk];
                     if (r > 1) {
@@ -947,7 +961,7 @@ export function drawAllOverlapHighlights(mapCtx, state) {
     });
 }
 
-export function drawOneExplosionZones(mapCtx, exp, tintIndex, state) {
+export function drawOneExplosionZones(mapCtx: CanvasRenderingContext2D, exp: any, tintIndex: number, state: AppState): void {
     const cx = exp.explosionCenter.x;
     const cy = exp.explosionCenter.y;
     const scale = state.scale;
@@ -957,7 +971,7 @@ export function drawOneExplosionZones(mapCtx, exp, tintIndex, state) {
     const useTerrain = terrain && terrain.features && terrain.features.length > 0;
     const zoneDefs = getZoneDefs();
 
-    const boundaryCache = {};
+    const boundaryCache: Record<string, TerrainBoundaryPoint[] | null> = {};
     if (useTerrain) {
         zoneDefs.forEach(function (zone) {
             boundaryCache[zone.key] = generateTerrainBoundaryPolygon(
@@ -970,7 +984,7 @@ export function drawOneExplosionZones(mapCtx, exp, tintIndex, state) {
         const colors = getZoneColors(zone.key, tintIndex);
         const pxRadius = radii[zone.key] * scale;
 
-        let dashStyle = zone.dash;
+        let dashStyle: number[] | string | null = zone.dash;
         if (typeof dashStyle === 'string') {
             switch (dashStyle) {
                 case 'dashed4': dashStyle = [4, 4]; break;
@@ -1018,7 +1032,7 @@ export function drawOneExplosionZones(mapCtx, exp, tintIndex, state) {
             const labelAngle = -Math.PI / 4;
             let labelRadius = pxRadius;
             if (useTerrain && boundaryCache[zone.key]) {
-                const points = boundaryCache[zone.key];
+                const points = boundaryCache[zone.key]!;
                 let closestIdx = 0;
                 let closestDiff = Infinity;
                 for (let i = 0; i < points.length; i++) {
@@ -1049,7 +1063,7 @@ export function drawOneExplosionZones(mapCtx, exp, tintIndex, state) {
     });
 }
 
-function drawExplosionMarker(mapCtx, cx, cy, number, isSelected) {
+function drawExplosionMarker(mapCtx: CanvasRenderingContext2D, cx: number, cy: number, number: number, isSelected: boolean): void {
     const ringRadius = isSelected ? 12 : 9;
     const innerRadius = isSelected ? 9 : 6;
 
