@@ -690,14 +690,12 @@
 
 <script setup lang="ts">
 import { onMounted, nextTick } from 'vue'
-import './legacy/index.js'
+import { initLegacyApp } from './legacy/index.ts'
 
 onMounted(() => {
   nextTick(() => {
-    if (window.App && typeof window.App.init === 'function') {
-      window.App.init()
-      console.log('[Vue] Legacy app initialized successfully')
-    }
+    initLegacyApp()
+    console.log('[Vue] Legacy app initialized successfully')
   })
 })
 </script>
