@@ -1,13 +1,29 @@
-(function (global) {
+import type {
+    AppState,
+    Explosion,
+    TerrainData,
+    ZoneDef,
+    TerrainBoundaryPoint
+} from '../types';
+
+(function (global: Window) {
     'use strict';
 
-    const rgba = global.DataDisplay.rgba;
-    const hexToRgba = global.DataDisplay.hexToRgba;
+    const rgba = (global.DataDisplay as any).rgba;
+    const hexToRgba = (global.DataDisplay as any).hexToRgba;
+    const Renderer = global.Renderer as any;
 
     const SHOCKWAVE_SPEED_KM_S = 2.5;
     const TOTAL_ANIM_DURATION = 6000;
 
-    function parseRgba(rgbaStr) {
+    interface RgbaResult {
+        r: number;
+        g: number;
+        b: number;
+        a: number;
+    }
+
+    function parseRgba(rgbaStr: string): RgbaResult {
         const match = rgbaStr.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,?\s*([\d.]+)?\s*\)/);
         if (match) {
             return {
@@ -20,9 +36,68 @@
         return { r: 255, g: 255, b: 255, a: 1 };
     }
 
-    function createExplosionAnimState(explosion, index, scale, terrain) {
-        let cx = explosion.explosionCenter.x;
-        let cy = explosion.explosionCenter.y;
+    interface Particle {
+        x: number;
+        y: number;
+        vx: number;
+        vy: number;
+        size: number;
+        life: number;
+        color: string;
+        gravity: number;
+    }
+
+    interface Debris {
+        x: number;
+        y: number;
+        vx: number;
+        vy: number;
+        size: number;
+        rotation: number;
+        rotSpeed: number;
+        life: number;
+        color: string;
+    }
+
+    interface SoundTriggers {
+        flash: boolean;
+        explosion: boolean;
+        shockwaveNear: boolean;
+        shockwaveFar: boolean;
+        quake: boolean;
+        debris: boolean;
+    }
+
+    interface ExplosionAnimState {
+        cx: number;
+        cy: number;
+        scale: number;
+        radii: { [key: string]: number };
+        particles: Particle[];
+        debris: Debris[];
+        smoke: number[];
+        maxShockwave: number;
+        terrain: TerrainData | null | undefined;
+        explosionRef: Explosion;
+        tintIndex: number;
+        zoneDisplayTimes: { [key: string]: number };
+        zoneOrder: string[];
+        maxRadiusKm: number;
+        quakeStartTime: number;
+        quakePeakTime: number;
+        quakeEndTime: number;
+        displayedZones: { [key: string]: boolean };
+        soundTriggers: SoundTriggers;
+    }
+
+    function createExplosionAnimState(
+        explosion: Explosion,
+        index: number,
+        scale: number,
+        terrain: TerrainData | null | undefined
+    ): ExplosionAnimState {
+        let cx = explosion.explosionCenter!.x;
+        let cy = explosion.explosionCenter!.y;
         let radii = explosion.radii;
         let safeScale = scale;
 
@@ -30,34 +105,34 @@
         if (!isFinite(cy)) cy = 300;
         if (!isFinite(safeScale) || safeScale <= 0) safeScale = 20;
 
-        if (!radii || !isFinite(radii.fireball)) {
+        if (!radii || !isFinite((radii as any).fireball)) {
             const yieldKt = explosion.yieldKilotons || 15000;
             const burstH = explosion.burstHeight || 1000;
             radii = global.Physics.calculateRadii(yieldKt, burstH);
         }
 
-        Object.keys(radii).forEach(function (key) {
-            if (!isFinite(radii[key])) radii[key] = 1;
+        Object.keys(radii!).forEach(function (key: string) {
+            if (radii && !isFinite((radii as any)[key])) (radii as any)[key] = 1;
         });
 
         const tint = index;
 
         const paletteColors = [
-            { p1: '#ffdd00', p2: '#ff6600', p3: '#ff0000', smoke: [140,90,50] },
-            { p1: '#00ffff', p2: '#6688ff', p3: '#0044ff', smoke: [90,90,140] },
-            { p1: '#ccff88', p2: '#88ff00', p3: '#00cc44', smoke: [90,130,80] },
-            { p1: '#ffcc66', p2: '#ff9944', p3: '#dd5500', smoke: [150,100,70] }
+            { p1: '#ffdd00', p2: '#ff6600', p3: '#ff0000', smoke: [140, 90, 50] },
+            { p1: '#00ffff', p2: '#6688ff', p3: '#0044ff', smoke: [90, 90, 140] },
+            { p1: '#ccff88', p2: '#88ff00', p3: '#00cc44', smoke: [90, 130, 80] },
+            { p1: '#ffcc66', p2: '#ff9944', p3: '#dd5500', smoke: [150, 100, 70] }
         ];
         const colors = paletteColors[tint % paletteColors.length];
 
-        const particles = [];
+        const particles: Particle[] = [];
         const particleCount = 150;
         for (let i = 0; i < particleCount; i++) {
             const angle = (i / particleCount) * Math.PI * 2;
             const speed = (2 + Math.random() * 4);
             const size = 2 + Math.random() * 6;
             const colorRand = Math.random();
-            let pcolor;
+            let pcolor: string;
             if (colorRand < 0.33) pcolor = colors.p1;
             else if (colorRand < 0.66) pcolor = colors.p2;
             else pcolor = colors.p3;
@@ -73,7 +148,7 @@
             });
         }
 
-        const debris = [];
+        const debris: Debris[] = [];
         const debrisCount = 80;
         for (let i = 0; i < debrisCount; i++) {
             const angle = Math.random() * Math.PI * 2;
@@ -92,13 +167,13 @@
         }
 
         const zoneOrder = ['fireball', 'radiation', 'severe', 'moderate', 'light', 'thermal'];
-        const zoneDisplayTimes = {};
-        zoneOrder.forEach((key, idx) => {
-            const radius = radii[key];
+        const zoneDisplayTimes: { [key: string]: number } = {};
+        zoneOrder.forEach((key: string, idx: number) => {
+            const radius = (radii as any)[key];
             zoneDisplayTimes[key] = radius / SHOCKWAVE_SPEED_KM_S;
         });
 
-        const maxRadiusPx = radii.thermal * safeScale * 1.2;
+        const maxRadiusPx = (radii as any).thermal * safeScale * 1.2;
         const quakeStartTime = zoneDisplayTimes.severe;
         const quakePeakTime = zoneDisplayTimes.moderate;
         const quakeEndTime = zoneDisplayTimes.thermal + 1.5;
@@ -107,7 +182,7 @@
             cx: cx,
             cy: cy,
             scale: safeScale,
-            radii: radii,
+            radii: radii as any,
             particles: particles,
             debris: debris,
             smoke: colors.smoke,
@@ -117,7 +192,7 @@
             tintIndex: tint,
             zoneDisplayTimes: zoneDisplayTimes,
             zoneOrder: zoneOrder,
-            maxRadiusKm: radii.thermal,
+            maxRadiusKm: (radii as any).thermal,
             quakeStartTime: quakeStartTime,
             quakePeakTime: quakePeakTime,
             quakeEndTime: quakeEndTime,
@@ -133,7 +208,11 @@
         };
     }
 
-    function drawPersistentFireball(effectCtx, a, progress) {
+    function drawPersistentFireball(
+        effectCtx: CanvasRenderingContext2D,
+        a: ExplosionAnimState,
+        progress: number
+    ): void {
         const fbRadius = a.radii.fireball * a.scale * (1 + Math.sin(progress * Math.PI) * 0.1);
         const fbAlpha = 0.7 * (1 - progress * 0.5);
         const fbGrad = effectCtx.createRadialGradient(a.cx, a.cy, 0, a.cx, a.cy, fbRadius);
@@ -147,21 +226,34 @@
         effectCtx.fill();
     }
 
-    function drawShockwaveRing(effectCtx, a, currentSW, swAlpha, terrain, scale, zoneKey) {
-        const useTerrain = terrain && terrain.features && terrain.features.length > 0;
+    function drawShockwaveRing(
+        effectCtx: CanvasRenderingContext2D,
+        a: ExplosionAnimState,
+        currentSW: number,
+        swAlpha: number,
+        terrain: TerrainData | null | undefined,
+        scale: number,
+        zoneKey: string
+    ): void {
+        const useTerrain = !!(terrain && (terrain as any).features && (terrain as any).features.length > 0);
         const segments = 96;
 
-        function getRadiusAtAngle(angle) {
+        function getRadiusAtAngle(angle: number): number {
             if (!useTerrain || !a.explosionRef) return currentSW;
             return global.Physics.calculateShockwaveRadiusAtAngle(
-                a.explosionRef, angle, zoneKey, terrain, scale, currentSW
+                a.explosionRef,
+                angle,
+                zoneKey,
+                terrain as any,
+                scale,
+                currentSW
             );
         }
 
         effectCtx.beginPath();
         for (let i = 0; i <= segments; i++) {
             const angle = (i / segments) * Math.PI * 2;
-            let r;
+            let r: number;
             if (useTerrain) {
                 r = getRadiusAtAngle(angle);
             } else {
@@ -172,7 +264,7 @@
             if (i === 0) effectCtx.moveTo(x, y);
             else {
                 const prevAngle = ((i - 1) / segments) * Math.PI * 2;
-                let prevR;
+                let prevR: number;
                 if (useTerrain) {
                     prevR = getRadiusAtAngle(prevAngle);
                 } else {
@@ -188,7 +280,11 @@
         effectCtx.stroke();
     }
 
-    function drawPhaseFlash(effectCtx, a, t) {
+    function drawPhaseFlash(
+        effectCtx: CanvasRenderingContext2D,
+        a: ExplosionAnimState,
+        t: number
+    ): void {
         const p = t / 0.05;
         const fireballP = Math.min(p, 1);
         let currentFireballRadius = Math.pow(fireballP, 0.5) * a.radii.fireball * a.scale;
@@ -230,7 +326,11 @@
         }
     }
 
-    function drawPhaseFireball(effectCtx, a, t) {
+    function drawPhaseFireball(
+        effectCtx: CanvasRenderingContext2D,
+        a: ExplosionAnimState,
+        t: number
+    ): void {
         const p = t / 0.3;
         drawPersistentFireball(effectCtx, a, p * 0.3);
 
@@ -268,7 +368,13 @@
         }
     }
 
-    function calculateShockwaveFront(a, t) {
+    interface ShockwaveFront {
+        km: number;
+        px: number;
+        fraction: number;
+    }
+
+    function calculateShockwaveFront(a: ExplosionAnimState, t: number): ShockwaveFront {
         const currentRadiusKm = Math.min(t * SHOCKWAVE_SPEED_KM_S, a.maxRadiusKm);
         const currentRadiusPx = currentRadiusKm * a.scale;
         return {
@@ -278,7 +384,7 @@
         };
     }
 
-    function getQuakeIntensity(a, t) {
+    function getQuakeIntensity(a: ExplosionAnimState, t: number): number {
         if (t < a.quakeStartTime) return 0;
         if (t > a.quakeEndTime) return 0;
 
@@ -294,7 +400,13 @@
         }
     }
 
-    function drawZoneProgress(effectCtx, a, zoneKey, currentFrontPx, t) {
+    function drawZoneProgress(
+        effectCtx: CanvasRenderingContext2D,
+        a: ExplosionAnimState,
+        zoneKey: string,
+        currentFrontPx: number,
+        t: number
+    ): void {
         const zoneRadiusPx = a.radii[zoneKey] * a.scale;
         if (currentFrontPx < zoneRadiusPx * 0.05) return;
 
@@ -302,15 +414,19 @@
         const progress = visibleRadius / zoneRadiusPx;
         const alpha = progress > 0.9 ? (1 - (progress - 0.9) * 10) : Math.min(1, progress * 2);
 
-        const colors = global.Renderer.getZoneColors(zoneKey, a.tintIndex);
-        const useTerrain = a.terrain && a.terrain.features && a.terrain.features.length > 0;
+        const colors = Renderer.getZoneColors(zoneKey, a.tintIndex);
+        const useTerrain = !!(a.terrain && (a.terrain as any).features && (a.terrain as any).features.length > 0);
 
         if (useTerrain) {
             const boundaryPoints = global.Physics.generateTerrainBoundaryPolygon(
-                a.explosionRef, zoneKey, a.terrain, a.scale, 72
+                a.explosionRef,
+                zoneKey,
+                a.terrain as any,
+                a.scale,
+                72
             );
             if (boundaryPoints && boundaryPoints.length > 0) {
-                const clippedPoints = boundaryPoints.map(pt => {
+                const clippedPoints = boundaryPoints.map((pt: TerrainBoundaryPoint) => {
                     const dist = Math.sqrt(Math.pow(pt.x - a.cx, 2) + Math.pow(pt.y - a.cy, 2));
                     const clipFactor = Math.min(1, visibleRadius / Math.max(1, dist));
                     return {
@@ -320,17 +436,17 @@
                     };
                 });
 
-                global.Renderer.drawPolygonPathFromPoints(effectCtx, clippedPoints, true);
-                effectCtx.fillStyle = colors.fill;
+                Renderer.drawPolygonPathFromPoints(effectCtx, clippedPoints as any, true);
+                effectCtx.fillStyle = (colors as any).fill;
                 effectCtx.fill();
 
-                global.Renderer.drawPolygonPathFromPoints(effectCtx, clippedPoints, true);
-                effectCtx.strokeStyle = colors.border;
+                Renderer.drawPolygonPathFromPoints(effectCtx, clippedPoints as any, true);
+                effectCtx.strokeStyle = (colors as any).border;
                 effectCtx.lineWidth = 1.5;
                 effectCtx.stroke();
             }
         } else {
-            const fillColor = parseRgba(colors.fill);
+            const fillColor = parseRgba((colors as any).fill);
             effectCtx.beginPath();
             effectCtx.arc(a.cx, a.cy, visibleRadius, 0, Math.PI * 2);
             effectCtx.fillStyle = rgba(
@@ -343,22 +459,40 @@
 
             effectCtx.beginPath();
             effectCtx.arc(a.cx, a.cy, visibleRadius, 0, Math.PI * 2);
-            effectCtx.strokeStyle = colors.border;
+            effectCtx.strokeStyle = (colors as any).border;
             effectCtx.lineWidth = 1.5;
             effectCtx.stroke();
         }
     }
 
-    function drawRippleWave(effectCtx, a, radius, waveWidth, alpha, color) {
+    interface RippleColor {
+        r: number;
+        g: number;
+        b: number;
+    }
+
+    function drawRippleWave(
+        effectCtx: CanvasRenderingContext2D,
+        a: ExplosionAnimState,
+        radius: number,
+        waveWidth: number,
+        alpha: number,
+        color: RippleColor
+    ): void {
         if (radius <= 0 || waveWidth <= 0 || alpha <= 0) return;
 
-        const useTerrain = a.terrain && a.terrain.features && a.terrain.features.length > 0;
+        const useTerrain = !!(a.terrain && (a.terrain as any).features && (a.terrain as any).features.length > 0);
         const segments = 96;
 
-        function getRadiusAtAngle(angle, baseRadius) {
+        function getRadiusAtAngle(angle: number, baseRadius: number): number {
             if (!useTerrain || !a.explosionRef) return baseRadius;
             return global.Physics.calculateShockwaveRadiusAtAngle(
-                a.explosionRef, angle, 'severe', a.terrain, a.scale, baseRadius
+                a.explosionRef,
+                angle,
+                'severe',
+                a.terrain as any,
+                a.scale,
+                baseRadius
             );
         }
 
@@ -394,7 +528,11 @@
         effectCtx.fill();
     }
 
-    function drawPhaseShockwave(effectCtx, a, t) {
+    function drawPhaseShockwave(
+        effectCtx: CanvasRenderingContext2D,
+        a: ExplosionAnimState,
+        t: number
+    ): void {
         const shockwave = calculateShockwaveFront(a, t);
         const phaseProgress = (t - 0.3) / 1.7;
 
@@ -422,7 +560,7 @@
                 if (waveRadius > 0) {
                     const waveAlpha = swAlpha * Math.max(0, 1 - i * 0.22) * (0.4 + Math.sin(t * 8 - i * 1.5) * 0.3);
                     const widthFactor = 1 + i * 0.3;
-                    const waveColor = i === 0
+                    const waveColor: RippleColor = i === 0
                         ? { r: 255, g: 240, b: 180 }
                         : i === 1
                         ? { r: 255, g: 180, b: 100 }
@@ -451,7 +589,7 @@
             }
         }
 
-        a.particles.forEach(function (particle) {
+        a.particles.forEach(function (particle: Particle) {
             particle.x += particle.vx * (1 + phaseProgress * 2);
             particle.y += particle.vy * (1 + phaseProgress * 1.5);
             particle.vy += particle.gravity;
@@ -465,7 +603,7 @@
         });
 
         if (phaseProgress > 0.2) {
-            a.debris.forEach(function (d) {
+            a.debris.forEach(function (d: Debris) {
                 const debrisPhase = (phaseProgress - 0.2) / 0.8;
                 d.x += d.vx * (1 + debrisPhase);
                 d.y += d.vy * (1 + debrisPhase * 0.8);
@@ -484,7 +622,11 @@
         }
     }
 
-    function drawPhaseMushroom(effectCtx, a, t) {
+    function drawPhaseMushroom(
+        effectCtx: CanvasRenderingContext2D,
+        a: ExplosionAnimState,
+        t: number
+    ): void {
         const phaseProgress = (t - 2.0) / 2.0;
         const mp = Math.min(1, phaseProgress);
 
@@ -493,31 +635,35 @@
         a.zoneOrder.forEach(zoneKey => {
             if (a.displayedZones[zoneKey]) {
                 const zoneRadiusPx = a.radii[zoneKey] * a.scale;
-                const colors = global.Renderer.getZoneColors(zoneKey, a.tintIndex);
-                const useTerrain = a.terrain && a.terrain.features && a.terrain.features.length > 0;
+                const colors = Renderer.getZoneColors(zoneKey, a.tintIndex);
+                const useTerrain = !!(a.terrain && (a.terrain as any).features && (a.terrain as any).features.length > 0);
                 const alpha = 0.16 * Math.max(0.3, 1 - mp * 0.5);
 
                 if (useTerrain) {
                     const boundaryPoints = global.Physics.generateTerrainBoundaryPolygon(
-                        a.explosionRef, zoneKey, a.terrain, a.scale, 72
+                        a.explosionRef,
+                        zoneKey,
+                        a.terrain as any,
+                        a.scale,
+                        72
                     );
                     if (boundaryPoints && boundaryPoints.length > 0) {
-                        global.Renderer.drawPolygonPathFromPoints(effectCtx, boundaryPoints, true);
+                        Renderer.drawPolygonPathFromPoints(effectCtx, boundaryPoints as any, true);
                         effectCtx.fillStyle = rgba(
-                            parseInt(colors.fill.slice(5, 8)),
-                            parseInt(colors.fill.slice(9, 12)),
-                            parseInt(colors.fill.slice(13, 16)),
+                            parseInt((colors as any).fill.slice(5, 8)),
+                            parseInt((colors as any).fill.slice(9, 12)),
+                            parseInt((colors as any).fill.slice(13, 16)),
                             alpha
                         );
                         effectCtx.fill();
 
-                        global.Renderer.drawPolygonPathFromPoints(effectCtx, boundaryPoints, true);
-                        effectCtx.strokeStyle = colors.border;
+                        Renderer.drawPolygonPathFromPoints(effectCtx, boundaryPoints as any, true);
+                        effectCtx.strokeStyle = (colors as any).border;
                         effectCtx.lineWidth = 1.5;
                         effectCtx.stroke();
                     }
                 } else {
-                    const fillColor = parseRgba(colors.fill);
+                    const fillColor = parseRgba((colors as any).fill);
                     effectCtx.beginPath();
                     effectCtx.arc(a.cx, a.cy, zoneRadiusPx, 0, Math.PI * 2);
                     effectCtx.fillStyle = rgba(
@@ -530,7 +676,7 @@
 
                     effectCtx.beginPath();
                     effectCtx.arc(a.cx, a.cy, zoneRadiusPx, 0, Math.PI * 2);
-                    effectCtx.strokeStyle = colors.border;
+                    effectCtx.strokeStyle = (colors as any).border;
                     effectCtx.lineWidth = 1.5;
                     effectCtx.stroke();
                 }
@@ -544,8 +690,8 @@
 
         const sr = a.smoke;
         const stemGrad = effectCtx.createLinearGradient(a.cx, a.cy, a.cx, cloudY);
-        stemGrad.addColorStop(0, rgba(sr[0]*0.7, sr[1]*0.5, sr[2]*0.4, 0.8 * (1 - mp * 0.3)));
-        stemGrad.addColorStop(1, rgba(sr[0]*0.5, sr[1]*0.35, sr[2]*0.25, 0.4 * (1 - mp * 0.5)));
+        stemGrad.addColorStop(0, rgba(sr[0] * 0.7, sr[1] * 0.5, sr[2] * 0.4, 0.8 * (1 - mp * 0.3)));
+        stemGrad.addColorStop(1, rgba(sr[0] * 0.5, sr[1] * 0.35, sr[2] * 0.25, 0.4 * (1 - mp * 0.5)));
         effectCtx.fillStyle = stemGrad;
         effectCtx.beginPath();
         effectCtx.moveTo(a.cx - stemWidth * 0.6, a.cy);
@@ -560,8 +706,8 @@
             a.cx, cloudY, cloudBaseWidth
         );
         cloudGrad.addColorStop(0, rgba(sr[0], sr[1], sr[2], 0.85 * (1 - mp * 0.4)));
-        cloudGrad.addColorStop(0.5, rgba(sr[0]*0.75, sr[1]*0.55, sr[2]*0.35, 0.7 * (1 - mp * 0.5)));
-        cloudGrad.addColorStop(1, rgba(sr[0]*0.45, sr[1]*0.4, sr[2]*0.3, 0));
+        cloudGrad.addColorStop(0.5, rgba(sr[0] * 0.75, sr[1] * 0.55, sr[2] * 0.35, 0.7 * (1 - mp * 0.5)));
+        cloudGrad.addColorStop(1, rgba(sr[0] * 0.45, sr[1] * 0.4, sr[2] * 0.3, 0));
         effectCtx.fillStyle = cloudGrad;
         effectCtx.beginPath();
         for (let ang = 0; ang < 8; ang++) {
@@ -590,12 +736,12 @@
                 const ds = 2 + (i * 0.17) % 4;
                 effectCtx.beginPath();
                 effectCtx.arc(dx, dy, ds, 0, Math.PI * 2);
-                effectCtx.fillStyle = rgba(sr[0]*0.6, sr[1]*0.5, sr[2]*0.4, debrisAlpha * (0.5 + (i * 0.013) % 0.5));
+                effectCtx.fillStyle = rgba(sr[0] * 0.6, sr[1] * 0.5, sr[2] * 0.4, debrisAlpha * (0.5 + (i * 0.013) % 0.5));
                 effectCtx.fill();
             }
         }
 
-        a.particles.forEach(function (particle) {
+        a.particles.forEach(function (particle: Particle) {
             particle.x += particle.vx * 0.3;
             particle.y += particle.vy * 0.3;
             particle.vy += 0.02;
@@ -609,7 +755,11 @@
         });
     }
 
-    function drawPhaseFadeOut(effectCtx, a, t) {
+    function drawPhaseFadeOut(
+        effectCtx: CanvasRenderingContext2D,
+        a: ExplosionAnimState,
+        t: number
+    ): void {
         const phaseProgress = (t - 4.0) / 2.0;
         const mp = Math.min(1, phaseProgress);
 
@@ -618,31 +768,35 @@
         a.zoneOrder.forEach(zoneKey => {
             if (a.displayedZones[zoneKey]) {
                 const zoneRadiusPx = a.radii[zoneKey] * a.scale;
-                const colors = global.Renderer.getZoneColors(zoneKey, a.tintIndex);
-                const useTerrain = a.terrain && a.terrain.features && a.terrain.features.length > 0;
+                const colors = Renderer.getZoneColors(zoneKey, a.tintIndex);
+                const useTerrain = !!(a.terrain && (a.terrain as any).features && (a.terrain as any).features.length > 0);
                 const alpha = 0.16 * fadeAlpha * 0.5;
 
                 if (useTerrain) {
                     const boundaryPoints = global.Physics.generateTerrainBoundaryPolygon(
-                        a.explosionRef, zoneKey, a.terrain, a.scale, 72
+                        a.explosionRef,
+                        zoneKey,
+                        a.terrain as any,
+                        a.scale,
+                        72
                     );
                     if (boundaryPoints && boundaryPoints.length > 0) {
-                        global.Renderer.drawPolygonPathFromPoints(effectCtx, boundaryPoints, true);
+                        Renderer.drawPolygonPathFromPoints(effectCtx, boundaryPoints as any, true);
                         effectCtx.fillStyle = rgba(
-                            parseInt(colors.fill.slice(5, 8)),
-                            parseInt(colors.fill.slice(9, 12)),
-                            parseInt(colors.fill.slice(13, 16)),
+                            parseInt((colors as any).fill.slice(5, 8)),
+                            parseInt((colors as any).fill.slice(9, 12)),
+                            parseInt((colors as any).fill.slice(13, 16)),
                             alpha
                         );
                         effectCtx.fill();
 
-                        global.Renderer.drawPolygonPathFromPoints(effectCtx, boundaryPoints, true);
-                        effectCtx.strokeStyle = colors.border;
+                        Renderer.drawPolygonPathFromPoints(effectCtx, boundaryPoints as any, true);
+                        effectCtx.strokeStyle = (colors as any).border;
                         effectCtx.lineWidth = 1.5;
                         effectCtx.stroke();
                     }
                 } else {
-                    const fillColor = parseRgba(colors.fill);
+                    const fillColor = parseRgba((colors as any).fill);
                     effectCtx.beginPath();
                     effectCtx.arc(a.cx, a.cy, zoneRadiusPx, 0, Math.PI * 2);
                     effectCtx.fillStyle = rgba(
@@ -665,9 +819,9 @@
             a.cx, cloudY, 0,
             a.cx, cloudY, cloudBaseWidth
         );
-        cloudGrad.addColorStop(0, rgba(sr[0]*0.8, sr[1]*0.6, sr[2]*0.4, 0.6 * fadeAlpha));
-        cloudGrad.addColorStop(0.5, rgba(sr[0]*0.6, sr[1]*0.45, sr[2]*0.3, 0.4 * fadeAlpha));
-        cloudGrad.addColorStop(1, rgba(sr[0]*0.35, sr[1]*0.3, sr[2]*0.25, 0));
+        cloudGrad.addColorStop(0, rgba(sr[0] * 0.8, sr[1] * 0.6, sr[2] * 0.4, 0.6 * fadeAlpha));
+        cloudGrad.addColorStop(0.5, rgba(sr[0] * 0.6, sr[1] * 0.45, sr[2] * 0.3, 0.4 * fadeAlpha));
+        cloudGrad.addColorStop(1, rgba(sr[0] * 0.35, sr[1] * 0.3, sr[2] * 0.25, 0));
         effectCtx.fillStyle = cloudGrad;
         effectCtx.beginPath();
         for (let ang = 0; ang < 8; ang++) {
@@ -687,7 +841,13 @@
         effectCtx.fill();
     }
 
-    function applyEarthquakeShake(ctx, width, height, totalQuakeIntensity, time) {
+    function applyEarthquakeShake(
+        ctx: CanvasRenderingContext2D,
+        width: number,
+        height: number,
+        totalQuakeIntensity: number,
+        time: number
+    ): void {
         if (totalQuakeIntensity <= 0) return;
 
         const maxShake = 12 * totalQuakeIntensity;
@@ -701,65 +861,81 @@
         ctx.translate(-width / 2, -height / 2);
     }
 
-    function restoreFromEarthquake(ctx) {
+    function restoreFromEarthquake(ctx: CanvasRenderingContext2D): void {
         ctx.restore();
     }
 
-    function triggerSounds(animStates, tSeconds, intensity) {
+    function triggerSounds(
+        animStates: ExplosionAnimState[],
+        tSeconds: number,
+        intensity: number
+    ): void {
         animStates.forEach(a => {
             if (!a.soundTriggers.flash && tSeconds >= 0) {
                 a.soundTriggers.flash = true;
-                if (global.AudioManager) {
-                    global.AudioManager.playFlashSound();
+                if ((global as any).AudioManager) {
+                    (global as any).AudioManager.playFlashSound();
                 }
             }
 
             if (!a.soundTriggers.explosion && tSeconds >= 0.05) {
                 a.soundTriggers.explosion = true;
-                if (global.AudioManager) {
-                    global.AudioManager.playExplosionSound(intensity);
+                if ((global as any).AudioManager) {
+                    (global as any).AudioManager.playExplosionSound(intensity);
                 }
             }
 
             if (!a.soundTriggers.shockwaveNear && tSeconds >= a.zoneDisplayTimes.severe * 0.5) {
                 a.soundTriggers.shockwaveNear = true;
-                if (global.AudioManager) {
-                    global.AudioManager.playShockwaveSound(a.radii.severe * 0.3, intensity);
+                if ((global as any).AudioManager) {
+                    (global as any).AudioManager.playShockwaveSound(a.radii.severe * 0.3, intensity);
                 }
             }
 
             if (!a.soundTriggers.shockwaveFar && tSeconds >= a.zoneDisplayTimes.moderate) {
                 a.soundTriggers.shockwaveFar = true;
-                if (global.AudioManager) {
-                    global.AudioManager.playShockwaveSound(a.radii.moderate * 0.5, intensity * 0.8);
+                if ((global as any).AudioManager) {
+                    (global as any).AudioManager.playShockwaveSound(a.radii.moderate * 0.5, intensity * 0.8);
                 }
             }
 
             if (!a.soundTriggers.quake && tSeconds >= a.quakeStartTime) {
                 a.soundTriggers.quake = true;
-                if (global.AudioManager) {
-                    global.AudioManager.playQuakeSound(intensity, 0);
+                if ((global as any).AudioManager) {
+                    (global as any).AudioManager.playQuakeSound(intensity, 0);
                 }
             }
 
             if (!a.soundTriggers.debris && tSeconds >= a.zoneDisplayTimes.moderate + 0.3) {
                 a.soundTriggers.debris = true;
-                if (global.AudioManager) {
-                    global.AudioManager.playDebrisSound(intensity);
+                if ((global as any).AudioManager) {
+                    (global as any).AudioManager.playDebrisSound(intensity);
                 }
             }
         });
     }
 
-    function animateExplosion(effectCtx, effectCanvas, mapWrapper, state, elements, flashOverlay) {
+    interface AnimationElements {
+        detonateBtn: HTMLButtonElement;
+        [key: string]: HTMLElement | HTMLButtonElement | null;
+    }
+
+    function animateExplosion(
+        effectCtx: CanvasRenderingContext2D,
+        effectCanvas: HTMLCanvasElement,
+        mapWrapper: HTMLElement,
+        state: AppState,
+        elements: AnimationElements,
+        flashOverlay: HTMLElement
+    ): void {
         if (state.isAnimating) return;
 
-        const activeExplosions = state.explosions.filter(function (e) {
+        const activeExplosions = state.explosions.filter(function (e: Explosion) {
             return e.explosionCenter && e.radii && e.radii.fireball && isFinite(e.radii.fireball);
         });
         if (activeExplosions.length === 0) return;
 
-        activeExplosions.forEach(function (e) {
+        activeExplosions.forEach(function (e: Explosion) {
             if (!e.yieldKilotons) e.yieldKilotons = 15000;
             if (!e.radii || !isFinite(e.radii.fireball)) {
                 e.radii = global.Physics.calculateRadii(e.yieldKilotons, e.burstHeight || 1000);
@@ -769,10 +945,10 @@
         state.isAnimating = true;
         elements.detonateBtn.disabled = true;
 
-        global.Renderer.drawMap(state.mapCtx, mapWrapper, state);
+        Renderer.drawMap(state.mapCtx!, mapWrapper, state);
 
-        if (global.AudioManager) {
-            global.AudioManager.init();
+        if ((global as any).AudioManager) {
+            (global as any).AudioManager.init();
         }
 
         flashOverlay.classList.add('active');
@@ -781,17 +957,17 @@
         const width = rect.width;
         const height = rect.height;
 
-        const animStates = activeExplosions.map(function (exp, idx) {
+        const animStates: ExplosionAnimState[] = activeExplosions.map(function (exp: Explosion, idx: number) {
             return createExplosionAnimState(exp, idx, state.scale, state.terrainData);
         });
 
-        const totalYield = activeExplosions.reduce((sum, e) => sum + (e.yieldKilotons || 15000), 0);
+        const totalYield = activeExplosions.reduce((sum: number, e: Explosion) => sum + (e.yieldKilotons || 15000), 0);
         const intensity = Math.min(1, totalYield / 50000);
 
         const startTime = performance.now();
         let earthquakeActive = false;
 
-        function draw(now) {
+        function draw(now: number): void {
             const elapsed = now - startTime;
             const tSeconds = elapsed / 1000;
             const progress = Math.min(elapsed / TOTAL_ANIM_DURATION, 1);
@@ -806,23 +982,23 @@
             });
 
             if (totalQuakeIntensity > 0.05) {
-                applyEarthquakeShake(state.mapCtx, width, height, totalQuakeIntensity, tSeconds);
-                global.Renderer.drawMap(state.mapCtx, mapWrapper, state);
-                restoreFromEarthquake(state.mapCtx);
+                applyEarthquakeShake(state.mapCtx!, width, height, totalQuakeIntensity, tSeconds);
+                Renderer.drawMap(state.mapCtx!, mapWrapper, state);
+                restoreFromEarthquake(state.mapCtx!);
             } else {
-                global.Renderer.drawMap(state.mapCtx, mapWrapper, state);
+                Renderer.drawMap(state.mapCtx!, mapWrapper, state);
             }
 
             if (progress <= 0.05) {
-                animStates.forEach(function (a) { drawPhaseFlash(effectCtx, a, tSeconds); });
+                animStates.forEach(function (a: ExplosionAnimState) { drawPhaseFlash(effectCtx, a, tSeconds); });
             } else if (progress <= 0.3) {
-                animStates.forEach(function (a) { drawPhaseFireball(effectCtx, a, tSeconds); });
+                animStates.forEach(function (a: ExplosionAnimState) { drawPhaseFireball(effectCtx, a, tSeconds); });
             } else if (progress <= 2.0) {
-                animStates.forEach(function (a) { drawPhaseShockwave(effectCtx, a, tSeconds); });
+                animStates.forEach(function (a: ExplosionAnimState) { drawPhaseShockwave(effectCtx, a, tSeconds); });
             } else if (progress <= 4.0) {
-                animStates.forEach(function (a) { drawPhaseMushroom(effectCtx, a, tSeconds); });
+                animStates.forEach(function (a: ExplosionAnimState) { drawPhaseMushroom(effectCtx, a, tSeconds); });
             } else {
-                animStates.forEach(function (a) { drawPhaseFadeOut(effectCtx, a, tSeconds); });
+                animStates.forEach(function (a: ExplosionAnimState) { drawPhaseFadeOut(effectCtx, a, tSeconds); });
             }
 
             if (progress < 1) {
@@ -833,10 +1009,10 @@
                     elements.detonateBtn.disabled = false;
                     flashOverlay.classList.remove('active');
 
-                    global.Renderer.drawMap(state.mapCtx, mapWrapper, state);
+                    Renderer.drawMap(state.mapCtx!, mapWrapper, state);
 
-                    if (global.Timeline) {
-                        global.Timeline.start(state, effectCtx, effectCanvas);
+                    if ((global as any).Timeline) {
+                        (global as any).Timeline.start(state, effectCtx, effectCanvas);
                     }
                 }, 800);
             }
@@ -847,6 +1023,6 @@
 
     global.Animation = {
         animateExplosion: animateExplosion
-    };
+    } as any;
 
 })(window);

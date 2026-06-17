@@ -1,15 +1,15 @@
-(function (global) {
+(function (global: Window) {
     'use strict';
 
-    let audioContext = null;
-    let masterGain = null;
+    let audioContext: AudioContext | null = null;
+    let masterGain: GainNode | null = null;
     let isInitialized = false;
 
-    function initAudio() {
+    function initAudio(): void {
         if (isInitialized) return;
         try {
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            audioContext = new AudioContext();
+            const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
+            audioContext = new AudioContextCtor();
             masterGain = audioContext.createGain();
             masterGain.gain.value = 0.5;
             masterGain.connect(audioContext.destination);
@@ -19,7 +19,7 @@
         }
     }
 
-    function ensureAudio() {
+    function ensureAudio(): AudioContext | null {
         if (!audioContext) initAudio();
         if (audioContext && audioContext.state === 'suspended') {
             audioContext.resume();
@@ -27,7 +27,31 @@
         return audioContext;
     }
 
-    function createExplosionSoundLayer(ctx, dest, startTime, options) {
+    interface ExplosionSoundLayerOptions {
+        frequencyStart: number;
+        frequencyEnd: number;
+        duration: number;
+        type?: OscillatorType;
+        startGain: number;
+        endGain: number;
+        attack: number;
+        release: number;
+        filterFreq?: number;
+        filterQ?: number;
+    }
+
+    interface SoundLayerResult {
+        osc: OscillatorNode;
+        gain: GainNode;
+        filter: BiquadFilterNode | null;
+    }
+
+    function createExplosionSoundLayer(
+        ctx: AudioContext,
+        dest: AudioNode,
+        startTime: number,
+        options: ExplosionSoundLayerOptions
+    ): SoundLayerResult {
         const {
             frequencyStart,
             frequencyEnd,
@@ -43,7 +67,7 @@
 
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        let filter = null;
+        let filter: BiquadFilterNode | null = null;
 
         osc.type = type || 'sine';
         osc.frequency.setValueAtTime(frequencyStart, startTime);
@@ -80,7 +104,7 @@
         return { osc, gain, filter };
     }
 
-    function createNoiseBuffer(ctx, duration) {
+    function createNoiseBuffer(ctx: AudioContext, duration: number): AudioBuffer {
         const bufferSize = ctx.sampleRate * duration;
         const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
         const data = buffer.getChannelData(0);
@@ -90,7 +114,27 @@
         return buffer;
     }
 
-    function createNoiseLayer(ctx, dest, startTime, options) {
+    interface NoiseLayerOptions {
+        duration: number;
+        startGain: number;
+        endGain: number;
+        filterFreq: number;
+        filterType?: BiquadFilterType;
+        attack?: number;
+    }
+
+    interface NoiseLayerResult {
+        noiseSource: AudioBufferSourceNode;
+        gain: GainNode;
+        filter: BiquadFilterNode;
+    }
+
+    function createNoiseLayer(
+        ctx: AudioContext,
+        dest: AudioNode,
+        startTime: number,
+        options: NoiseLayerOptions
+    ): NoiseLayerResult {
         const {
             duration,
             startGain,
@@ -130,16 +174,23 @@
         return { noiseSource, gain, filter };
     }
 
-    function playExplosionSound(intensity) {
+    interface SoundGroupResult {
+        ctx: AudioContext;
+        group: GainNode;
+        layers: (SoundLayerResult | NoiseLayerResult)[];
+        startTime: number;
+    }
+
+    function playExplosionSound(intensity: number): SoundGroupResult | null {
         const ctx = ensureAudio();
         if (!ctx) return null;
 
         const now = ctx.currentTime;
         const explosionGroup = ctx.createGain();
-        explosionGroup.connect(masterGain);
+        explosionGroup.connect(masterGain as GainNode);
         explosionGroup.gain.value = 0.8 + intensity * 0.4;
 
-        const layers = [];
+        const layers: (SoundLayerResult | NoiseLayerResult)[] = [];
 
         layers.push(createExplosionSoundLayer(ctx, explosionGroup, now, {
             frequencyStart: 150,
@@ -202,7 +253,7 @@
         };
     }
 
-    function playShockwaveSound(distance, intensity) {
+    function playShockwaveSound(distance: number, intensity: number): SoundGroupResult | null {
         const ctx = ensureAudio();
         if (!ctx) return null;
 
@@ -211,12 +262,12 @@
         const playTime = now + delay;
 
         const shockwaveGroup = ctx.createGain();
-        shockwaveGroup.connect(masterGain);
+        shockwaveGroup.connect(masterGain as GainNode);
 
         const distanceFactor = Math.max(0.1, 1 - distance / 200);
         shockwaveGroup.gain.value = (0.4 + intensity * 0.3) * distanceFactor;
 
-        const layers = [];
+        const layers: (SoundLayerResult | NoiseLayerResult)[] = [];
 
         layers.push(createExplosionSoundLayer(ctx, shockwaveGroup, playTime, {
             frequencyStart: 120,
@@ -248,7 +299,7 @@
         };
     }
 
-    function playQuakeSound(intensity, delay) {
+    function playQuakeSound(intensity: number, delay: number): SoundGroupResult | null {
         const ctx = ensureAudio();
         if (!ctx) return null;
 
@@ -256,10 +307,10 @@
         const playTime = now + (delay || 0);
 
         const quakeGroup = ctx.createGain();
-        quakeGroup.connect(masterGain);
+        quakeGroup.connect(masterGain as GainNode);
         quakeGroup.gain.value = 0.3 + intensity * 0.3;
 
-        const layers = [];
+        const layers: (SoundLayerResult | NoiseLayerResult)[] = [];
 
         layers.push(createExplosionSoundLayer(ctx, quakeGroup, playTime, {
             frequencyStart: 50,
@@ -304,17 +355,17 @@
         };
     }
 
-    function playFlashSound() {
+    function playFlashSound(): SoundGroupResult | null {
         const ctx = ensureAudio();
         if (!ctx) return null;
 
         const now = ctx.currentTime;
 
         const flashGroup = ctx.createGain();
-        flashGroup.connect(masterGain);
+        flashGroup.connect(masterGain as GainNode);
         flashGroup.gain.value = 0.6;
 
-        const layers = [];
+        const layers: (SoundLayerResult | NoiseLayerResult)[] = [];
 
         layers.push(createExplosionSoundLayer(ctx, flashGroup, now, {
             frequencyStart: 8000,
@@ -344,16 +395,16 @@
         };
     }
 
-    function playDebrisSound(intensity) {
+    function playDebrisSound(intensity: number): SoundGroupResult | null {
         const ctx = ensureAudio();
         if (!ctx) return null;
 
         const now = ctx.currentTime;
         const debrisGroup = ctx.createGain();
-        debrisGroup.connect(masterGain);
+        debrisGroup.connect(masterGain as GainNode);
         debrisGroup.gain.value = 0.2 + intensity * 0.15;
 
-        const layers = [];
+        const layers: (SoundLayerResult | NoiseLayerResult)[] = [];
 
         for (let i = 0; i < 5; i++) {
             const delay = 0.3 + Math.random() * 0.8;
@@ -378,16 +429,24 @@
         };
     }
 
-    function setMasterVolume(volume) {
+    function setMasterVolume(volume: number): void {
         if (masterGain) {
             masterGain.gain.value = Math.max(0, Math.min(1, volume));
         }
     }
 
-    function playExplosionAudioSequence(intensity, maxRadius) {
-        const sounds = {};
+    interface ExplosionAudioSequence {
+        flash: SoundGroupResult | null;
+        explosion?: SoundGroupResult | null;
+        shockwave?: SoundGroupResult | null;
+        quake?: SoundGroupResult | null;
+        debris?: SoundGroupResult | null;
+    }
 
-        sounds.flash = playFlashSound();
+    function playExplosionAudioSequence(intensity: number, maxRadius: number): ExplosionAudioSequence {
+        const sounds: ExplosionAudioSequence = {
+            flash: playFlashSound()
+        };
 
         setTimeout(() => {
             sounds.explosion = playExplosionSound(intensity);
@@ -410,7 +469,7 @@
         return sounds;
     }
 
-    global.AudioManager = {
+    (global as any).AudioManager = {
         init: initAudio,
         playExplosionSound: playExplosionSound,
         playShockwaveSound: playShockwaveSound,

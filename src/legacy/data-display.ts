@@ -1,25 +1,39 @@
-(function (global) {
+import type {
+    AppState,
+    Explosion,
+    ZoneDef,
+    City,
+    AllCitiesBuildingDamageResult,
+    CityBuildingDamageResult,
+    DataDisplayElements,
+    BuildingResult,
+    DistByDamage,
+    DamageLevelKey,
+    BuildingType
+} from '../types';
+
+(function (global: Window) {
     'use strict';
 
-    function rgba(r, g, b, a) {
+    function rgba(r: number, g: number, b: number, a: number): string {
         return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
     }
 
-    function hexToRgba(hex, alpha) {
+    function hexToRgba(hex: string, alpha: number): string {
         const r = parseInt(hex.slice(1, 3), 16);
         const g = parseInt(hex.slice(3, 5), 16);
         const b = parseInt(hex.slice(5, 7), 16);
         return rgba(r, g, b, alpha);
     }
 
-    function formatNumber(num) {
+    function formatNumber(num: number): string {
         if (!isFinite(num)) return '0';
         if (num >= 100000000) return (num / 100000000).toFixed(2) + ' 亿';
         if (num >= 10000) return (num / 10000).toFixed(1) + ' 万';
         return Math.round(num).toLocaleString();
     }
 
-    const elementIds = [
+    const elementIds: string[] = [
         'estimatedDeaths', 'estimatedInjured', 'affectedArea', 'energyReleased',
         'statExplosionCount', 'statCombinedArea', 'statTotalArea', 'statOverlapArea',
         'buildingTotalPop', 'buildingDestroyedPop', 'buildingAvgStrength',
@@ -29,16 +43,23 @@
         'dataPanels', 'legendItems'
     ];
 
-    let radiusElementMap = {};
+    interface RadiusElementMap {
+        [key: string]: {
+            radius: HTMLElement | null;
+            diameter: HTMLElement | null;
+        };
+    }
 
-    function generateDataPanels(elements) {
+    let radiusElementMap: RadiusElementMap = {};
+
+    function generateDataPanels(elements: DataDisplayElements): void {
         if (!elements.dataPanels) return;
 
-        const zones = global.Physics.getZones();
+        const zones: ZoneDef[] = global.Physics.getZones();
         elements.dataPanels.innerHTML = '';
         radiusElementMap = {};
 
-        zones.forEach(function (zone) {
+        zones.forEach(function (zone: ZoneDef) {
             const card = document.createElement('div');
             card.className = 'data-card';
             card.dataset.zoneKey = zone.key;
@@ -55,7 +76,7 @@
                 <div class="data-desc">${zone.key === 'fireball' ? '直径约 <span id="' + diameterId + '">0</span> 公里' : (zone.description || zone.overpressureThreshold + ' psi 超压')}</div>
             `;
 
-            elements.dataPanels.appendChild(card);
+            elements.dataPanels?.appendChild(card);
 
             radiusElementMap[zone.key] = {
                 radius: document.getElementById(radiusId),
@@ -64,13 +85,13 @@
         });
     }
 
-    function generateLegend(elements) {
+    function generateLegend(elements: DataDisplayElements): void {
         if (!elements.legendItems) return;
 
-        const zones = global.Physics.getZones();
+        const zones: ZoneDef[] = global.Physics.getZones();
         elements.legendItems.innerHTML = '';
 
-        zones.forEach(function (zone) {
+        zones.forEach(function (zone: ZoneDef) {
             const item = document.createElement('div');
             item.className = 'legend-item';
             item.dataset.zoneKey = zone.key;
@@ -86,27 +107,27 @@
                 </div>
             `;
 
-            elements.legendItems.appendChild(item);
+            elements.legendItems?.appendChild(item);
         });
     }
 
-    function getElements() {
-        const elements = {};
-        elementIds.forEach(function (id) {
+    function getElements(): DataDisplayElements {
+        const elements: DataDisplayElements = {};
+        elementIds.forEach(function (id: string) {
             elements[id] = document.getElementById(id);
         });
         return elements;
     }
 
-    function getSelectedExplosion(state) {
+    function getSelectedExplosion(state: AppState): Explosion | null {
         if (!state.selectedExplosionId) return null;
-        return state.explosions.find(function (e) { return e.id === state.selectedExplosionId; }) || null;
+        return state.explosions.find(function (e: Explosion) { return e.id === state.selectedExplosionId; }) || null;
     }
 
-    function updateRadiiDisplay(elements, radii) {
-        const zones = global.Physics.getZones();
+    function updateRadiiDisplay(elements: DataDisplayElements, radii: { [key: string]: number } | null): void {
+        const zones: ZoneDef[] = global.Physics.getZones();
 
-        zones.forEach(function (zone) {
+        zones.forEach(function (zone: ZoneDef) {
             const radiusValue = radii && radii[zone.key] !== undefined ? radii[zone.key] : 0;
             const elementEntry = radiusElementMap[zone.key];
 
@@ -119,22 +140,45 @@
         });
     }
 
-    function updateCombinedStats(elements, stats) {
-        elements.statExplosionCount.textContent = stats.count;
-        elements.statCombinedArea.textContent = formatNumber(stats.combinedArea);
-        elements.statTotalArea.textContent = formatNumber(stats.totalArea);
-        elements.statOverlapArea.textContent = formatNumber(stats.overlapArea);
+    interface CombinedStats {
+        count: number;
+        combinedArea: number;
+        totalArea: number;
+        overlapArea: number;
     }
 
-    function updateDataDisplay(elements, state) {
+    function updateCombinedStats(elements: DataDisplayElements, stats: CombinedStats): void {
+        if (elements.statExplosionCount) {
+            elements.statExplosionCount.textContent = String(stats.count);
+        }
+        if (elements.statCombinedArea) {
+            elements.statCombinedArea.textContent = formatNumber(stats.combinedArea);
+        }
+        if (elements.statTotalArea) {
+            elements.statTotalArea.textContent = formatNumber(stats.totalArea);
+        }
+        if (elements.statOverlapArea) {
+            elements.statOverlapArea.textContent = formatNumber(stats.overlapArea);
+        }
+    }
+
+    function updateDataDisplay(elements: DataDisplayElements, state: AppState): void {
         const viewMode = state.viewMode || 'combined';
 
         if (!state.explosions || state.explosions.length === 0) {
             updateRadiiDisplay(elements, null);
-            elements.estimatedDeaths.textContent = '0';
-            elements.estimatedInjured.textContent = '0';
-            elements.affectedArea.textContent = '0';
-            elements.energyReleased.textContent = '0';
+            if (elements.estimatedDeaths) {
+                elements.estimatedDeaths.textContent = '0';
+            }
+            if (elements.estimatedInjured) {
+                elements.estimatedInjured.textContent = '0';
+            }
+            if (elements.affectedArea) {
+                elements.affectedArea.textContent = '0';
+            }
+            if (elements.energyReleased) {
+                elements.energyReleased.textContent = '0';
+            }
             updateCombinedStats(elements, { count: 0, combinedArea: 0, totalArea: 0, overlapArea: 0 });
             if (elements.buildingSummaryView) {
                 updateBuildingDisplay(elements, state);
@@ -152,22 +196,38 @@
                     state.cities,
                     [selected],
                     state.scale,
-                    state.terrainData
+                    state.terrainData as any
                 );
-                elements.estimatedDeaths.textContent = formatNumber(casualties.deaths);
-                elements.estimatedInjured.textContent = formatNumber(casualties.injured);
+                if (elements.estimatedDeaths) {
+                    elements.estimatedDeaths.textContent = formatNumber(casualties.deaths);
+                }
+                if (elements.estimatedInjured) {
+                    elements.estimatedInjured.textContent = formatNumber(casualties.injured);
+                }
 
                 const area = global.Physics.calculateAffectedArea(r);
-                elements.affectedArea.textContent = formatNumber(area);
+                if (elements.affectedArea) {
+                    elements.affectedArea.textContent = formatNumber(area);
+                }
 
                 const energy = global.Physics.calculateEnergy(selected.yieldKilotons);
-                elements.energyReleased.textContent = formatNumber(energy);
+                if (elements.energyReleased) {
+                    elements.energyReleased.textContent = formatNumber(energy);
+                }
             } else {
                 updateRadiiDisplay(elements, null);
-                elements.estimatedDeaths.textContent = '0';
-                elements.estimatedInjured.textContent = '0';
-                elements.affectedArea.textContent = '0';
-                elements.energyReleased.textContent = '0';
+                if (elements.estimatedDeaths) {
+                    elements.estimatedDeaths.textContent = '0';
+                }
+                if (elements.estimatedInjured) {
+                    elements.estimatedInjured.textContent = '0';
+                }
+                if (elements.affectedArea) {
+                    elements.affectedArea.textContent = '0';
+                }
+                if (elements.energyReleased) {
+                    elements.energyReleased.textContent = '0';
+                }
             }
         } else {
             const stats = global.Physics.calculateAllCombinedStats(state.explosions, state.scale);
@@ -176,16 +236,24 @@
                 state.cities,
                 state.explosions,
                 state.scale,
-                state.terrainData
+                state.terrainData as any
             );
 
             const maxRadiiPerZone = getMaxRadiiAcrossExplosions(state.explosions);
             updateRadiiDisplay(elements, maxRadiiPerZone);
 
-            elements.estimatedDeaths.textContent = formatNumber(casualties.deaths);
-            elements.estimatedInjured.textContent = formatNumber(casualties.injured);
-            elements.affectedArea.textContent = formatNumber(stats.combinedArea);
-            elements.energyReleased.textContent = formatNumber(stats.totalEnergy);
+            if (elements.estimatedDeaths) {
+                elements.estimatedDeaths.textContent = formatNumber(casualties.deaths);
+            }
+            if (elements.estimatedInjured) {
+                elements.estimatedInjured.textContent = formatNumber(casualties.injured);
+            }
+            if (elements.affectedArea) {
+                elements.affectedArea.textContent = formatNumber(stats.combinedArea);
+            }
+            if (elements.energyReleased) {
+                elements.energyReleased.textContent = formatNumber(stats.totalEnergy);
+            }
 
             updateCombinedStats(elements, stats);
         }
@@ -195,17 +263,17 @@
         }
     }
 
-    function getMaxRadiiAcrossExplosions(explosions) {
-        const zones = global.Physics.getZones();
-        const result = {};
-        zones.forEach(function (z) {
+    function getMaxRadiiAcrossExplosions(explosions: Explosion[]): { [key: string]: number } {
+        const zones: ZoneDef[] = global.Physics.getZones();
+        const result: { [key: string]: number } = {};
+        zones.forEach(function (z: ZoneDef) {
             result[z.key] = 0;
         });
 
-        explosions.forEach(function (exp) {
+        explosions.forEach(function (exp: Explosion) {
             if (!exp.radii) return;
-            zones.forEach(function (z) {
-                if (exp.radii[z.key] !== undefined && exp.radii[z.key] > result[z.key]) {
+            zones.forEach(function (z: ZoneDef) {
+                if (exp.radii && exp.radii[z.key] !== undefined && exp.radii[z.key] > result[z.key]) {
                     result[z.key] = exp.radii[z.key];
                 }
             });
@@ -213,25 +281,37 @@
         return result;
     }
 
-    function getBuildingDamageData(state, elements) {
+    interface BuildingDamageData extends AllCitiesBuildingDamageResult {
+        isSingleCity?: boolean;
+        cityName?: string;
+        maxOverpressure?: number;
+        avgStructureFactor?: number;
+    }
+
+    function getBuildingDamageData(state: AppState, elements: DataDisplayElements): BuildingDamageData | null {
         const explosions = state.explosions || [];
         const cities = state.cities || [];
         const terrain = state.terrainData;
         const scale = state.scale;
-        const selectedCityIndex = elements.buildingCitySelect ? elements.buildingCitySelect.value : '';
+        const selectedCityIndex = elements.buildingCitySelect ? (elements.buildingCitySelect as HTMLSelectElement).value : '';
 
         if (!explosions || explosions.length === 0 || !cities || cities.length === 0) {
             return null;
         }
 
-        const positionedExplosions = explosions.filter(function (e) { return e.explosionCenter; });
+        const positionedExplosions = explosions.filter(function (e: Explosion) { return e.explosionCenter; });
         if (positionedExplosions.length === 0) return null;
 
         if (selectedCityIndex && selectedCityIndex !== '') {
             const cityIdx = parseInt(selectedCityIndex, 10);
             const city = cities[cityIdx];
             if (city) {
-                const result = global.Physics.calculateCityBuildingDamage(city, positionedExplosions, scale, terrain);
+                const result: CityBuildingDamageResult = global.Physics.calculateCityBuildingDamage(
+                    city,
+                    positionedExplosions,
+                    scale,
+                    terrain as any
+                );
                 return {
                     cityResults: [result],
                     totalDeaths: Math.round(result.totalDeaths),
@@ -239,7 +319,7 @@
                     totalDestroyedPop: Math.round(result.totalDestroyedPop),
                     totalPopulation: city.population,
                     totalByDamage: result.distByDamage,
-                    totalByBuildingType: result.buildingResults,
+                    totalByBuildingType: result.buildingResults as any,
                     overallSurvivalRate: result.survivalRate,
                     maxOverpressure: result.maxOverpressure,
                     avgStructureFactor: result.avgStructureFactor,
@@ -249,51 +329,83 @@
             }
         }
 
-        return global.Physics.calculateAllCitiesBuildingDamage(cities, positionedExplosions, scale, terrain);
+        return global.Physics.calculateAllCitiesBuildingDamage(cities, positionedExplosions, scale, terrain as any);
     }
 
-    function updateBuildingDisplay(elements, state) {
+    function updateBuildingDisplay(elements: DataDisplayElements, state: AppState): void {
         if (!elements.buildingSummaryView) return;
 
         const data = getBuildingDamageData(state, elements);
 
         if (!data) {
-            elements.buildingTotalPop.textContent = formatNumber(state.cities.reduce(function (sum, c) { return sum + c.population; }, 0));
-            elements.buildingDestroyedPop.textContent = '0';
-            elements.buildingAvgStrength.textContent = '—';
-            elements.buildingSurvivalRate.textContent = '—';
-            elements.maxOverpressure.textContent = '0 psi';
-            elements.overpressureBar.style.width = '0%';
-            elements.buildingTypeList.innerHTML = '';
-            elements.damageBarChart.innerHTML = '';
-            elements.damageStatsList.innerHTML = '';
+            if (elements.buildingTotalPop) {
+                elements.buildingTotalPop.textContent = formatNumber(
+                    state.cities.reduce(function (sum: number, c: City) { return sum + c.population; }, 0)
+                );
+            }
+            if (elements.buildingDestroyedPop) {
+                elements.buildingDestroyedPop.textContent = '0';
+            }
+            if (elements.buildingAvgStrength) {
+                elements.buildingAvgStrength.textContent = '—';
+            }
+            if (elements.buildingSurvivalRate) {
+                elements.buildingSurvivalRate.textContent = '—';
+            }
+            if (elements.maxOverpressure) {
+                elements.maxOverpressure.textContent = '0 psi';
+            }
+            if (elements.overpressureBar) {
+                (elements.overpressureBar as HTMLElement).style.width = '0%';
+            }
+            if (elements.buildingTypeList) {
+                elements.buildingTypeList.innerHTML = '';
+            }
+            if (elements.damageBarChart) {
+                elements.damageBarChart.innerHTML = '';
+            }
+            if (elements.damageStatsList) {
+                elements.damageStatsList.innerHTML = '';
+            }
             return;
         }
 
-        elements.buildingTotalPop.textContent = formatNumber(data.totalPopulation);
-        elements.buildingDestroyedPop.textContent = formatNumber(data.totalDestroyedPop);
+        if (elements.buildingTotalPop) {
+            elements.buildingTotalPop.textContent = formatNumber(data.totalPopulation);
+        }
+        if (elements.buildingDestroyedPop) {
+            elements.buildingDestroyedPop.textContent = formatNumber(data.totalDestroyedPop);
+        }
 
         const avgStrength = data.avgStructureFactor !== undefined
             ? data.avgStructureFactor.toFixed(2)
             : calculateOverallStructureFactor(state.cities).toFixed(2);
-        elements.buildingAvgStrength.textContent = avgStrength;
+        if (elements.buildingAvgStrength) {
+            elements.buildingAvgStrength.textContent = avgStrength;
+        }
 
         const survivalPct = (data.overallSurvivalRate * 100).toFixed(1);
-        elements.buildingSurvivalRate.textContent = survivalPct + '%';
+        if (elements.buildingSurvivalRate) {
+            elements.buildingSurvivalRate.textContent = survivalPct + '%';
+        }
 
         const maxOp = data.maxOverpressure || getMaxOverpressure(state);
-        elements.maxOverpressure.textContent = maxOp.toFixed(2) + ' psi';
+        if (elements.maxOverpressure) {
+            elements.maxOverpressure.textContent = maxOp.toFixed(2) + ' psi';
+        }
         const opPercent = Math.min(100, (maxOp / 20) * 100);
-        elements.overpressureBar.style.width = opPercent + '%';
+        if (elements.overpressureBar) {
+            (elements.overpressureBar as HTMLElement).style.width = opPercent + '%';
+        }
 
         updateBuildingTypeList(elements, data);
         updateDamageDistribution(elements, data);
     }
 
-    function calculateOverallStructureFactor(cities) {
+    function calculateOverallStructureFactor(cities: City[]): number {
         let totalPop = 0;
         let weightedFactor = 0;
-        cities.forEach(function (city) {
+        cities.forEach(function (city: City) {
             const factor = global.Physics.calculateAvgStructureFactor(city.buildingDistribution);
             totalPop += city.population;
             weightedFactor += factor * city.population;
@@ -301,13 +413,14 @@
         return totalPop > 0 ? weightedFactor / totalPop : 0;
     }
 
-    function getMaxOverpressure(state) {
+    function getMaxOverpressure(state: AppState): number {
         const explosions = state.explosions || [];
         const cities = state.cities || [];
         let maxOp = 0;
-        explosions.forEach(function (exp) {
+        explosions.forEach(function (exp: Explosion) {
             if (!exp.explosionCenter) return;
-            cities.forEach(function (city) {
+            cities.forEach(function (city: City) {
+                if (!exp.explosionCenter) return;
                 const dx = city.x - exp.explosionCenter.x;
                 const dy = city.y - exp.explosionCenter.y;
                 const distPx = Math.sqrt(dx * dx + dy * dy);
@@ -319,24 +432,24 @@
         return maxOp;
     }
 
-    function updateBuildingTypeList(elements, data) {
+    function updateBuildingTypeList(elements: DataDisplayElements, data: BuildingDamageData): void {
         if (!elements.buildingTypeList) return;
 
-        const BUILDING_TYPES = global.Physics.BUILDING_TYPES;
-        const BUILDING_TYPE_ORDER = global.Physics.BUILDING_TYPE_ORDER;
-        const DAMAGE_LEVELS = global.Physics.DAMAGE_LEVELS;
+        const BUILDING_TYPES: { [key: string]: BuildingType } = global.Physics.BUILDING_TYPES;
+        const BUILDING_TYPE_ORDER: string[] = global.Physics.BUILDING_TYPE_ORDER;
+        const DAMAGE_LEVELS: { [key: string]: { name: string; color: string } } = global.Physics.DAMAGE_LEVELS;
 
         let html = '';
-        let totalPop = data.totalPopulation;
+        const totalPop = data.totalPopulation;
 
-        BUILDING_TYPE_ORDER.forEach(function (type) {
+        BUILDING_TYPE_ORDER.forEach(function (type: string) {
             const bt = BUILDING_TYPES[type];
-            let typeData;
+            let typeData: BuildingResult | any;
 
             if (data.isSingleCity) {
-                typeData = data.totalByBuildingType[type];
+                typeData = (data.totalByBuildingType as any)[type];
             } else {
-                typeData = data.totalByBuildingType[type];
+                typeData = (data.totalByBuildingType as any)[type];
             }
 
             if (!typeData) return;
@@ -374,7 +487,7 @@
         elements.buildingTypeList.innerHTML = html;
     }
 
-    function getOverallDamageLevel(typeData) {
+    function getOverallDamageLevel(typeData: any): DamageLevelKey {
         if (typeData.damageLevel) return typeData.damageLevel;
 
         const pop = typeData.population || 1;
@@ -388,23 +501,23 @@
         return 'intact';
     }
 
-    function updateDamageDistribution(elements, data) {
+    function updateDamageDistribution(elements: DataDisplayElements, data: BuildingDamageData): void {
         if (!elements.damageBarChart || !elements.damageStatsList) return;
 
-        const DAMAGE_LEVELS = global.Physics.DAMAGE_LEVELS;
-        const damageOrder = ['intact', 'light', 'moderate', 'severe', 'destroyed'];
+        const DAMAGE_LEVELS: { [key: string]: { name: string; color: string } } = global.Physics.DAMAGE_LEVELS;
+        const damageOrder: DamageLevelKey[] = ['intact', 'light', 'moderate', 'severe', 'destroyed'];
         const totalPop = data.totalPopulation;
 
         let maxValue = 0;
-        damageOrder.forEach(function (level) {
-            const val = data.totalByDamage[level] || 0;
+        damageOrder.forEach(function (level: DamageLevelKey) {
+            const val = (data.totalByDamage as DistByDamage)[level] || 0;
             if (val > maxValue) maxValue = val;
         });
 
         let barHtml = '';
-        damageOrder.forEach(function (level) {
+        damageOrder.forEach(function (level: DamageLevelKey) {
             const dl = DAMAGE_LEVELS[level];
-            const val = data.totalByDamage[level] || 0;
+            const val = (data.totalByDamage as DistByDamage)[level] || 0;
             const heightPct = maxValue > 0 ? (val / maxValue * 100) : 0;
             const pct = totalPop > 0 ? (val / totalPop * 100).toFixed(1) : 0;
 
@@ -417,9 +530,9 @@
         elements.damageBarChart.innerHTML = barHtml;
 
         let statsHtml = '';
-        damageOrder.forEach(function (level) {
+        damageOrder.forEach(function (level: DamageLevelKey) {
             const dl = DAMAGE_LEVELS[level];
-            const val = data.totalByDamage[level] || 0;
+            const val = (data.totalByDamage as DistByDamage)[level] || 0;
             const pct = totalPop > 0 ? (val / totalPop * 100).toFixed(1) : 0;
 
             statsHtml += '<div class="damage-stat-row">';
@@ -436,19 +549,19 @@
         elements.damageStatsList.innerHTML = statsHtml;
     }
 
-    function populateBuildingCitySelect(elements, cities) {
+    function populateBuildingCitySelect(elements: DataDisplayElements, cities: City[]): void {
         if (!elements.buildingCitySelect) return;
 
-        const currentValue = elements.buildingCitySelect.value;
+        const currentValue = (elements.buildingCitySelect as HTMLSelectElement).value;
         let html = '<option value="">全部城市汇总</option>';
 
-        cities.forEach(function (city, idx) {
+        cities.forEach(function (city: City, idx: number) {
             html += '<option value="' + idx + '">' + city.name + ' (' + formatNumber(city.population) + '人)</option>';
         });
 
         elements.buildingCitySelect.innerHTML = html;
         if (currentValue) {
-            elements.buildingCitySelect.value = currentValue;
+            (elements.buildingCitySelect as HTMLSelectElement).value = currentValue;
         }
     }
 
@@ -462,6 +575,6 @@
         updateDataDisplay: updateDataDisplay,
         updateBuildingDisplay: updateBuildingDisplay,
         populateBuildingCitySelect: populateBuildingCitySelect
-    };
+    } as any;
 
 })(window);

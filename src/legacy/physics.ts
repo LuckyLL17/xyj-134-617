@@ -1,7 +1,38 @@
-(function (global) {
+import type {
+  Point,
+  Explosion,
+  ExplosionRadii,
+  ZoneDef,
+  CasualtyRates,
+  City,
+  BuildingDistribution,
+  BuildingType,
+  DamageLevel,
+  DamageLevelKey,
+  Shelter,
+  Road,
+  TerrainData,
+  TerrainFeature,
+  EvacuationNode,
+  EvacuationEdge,
+  BuildingCasualtyResult,
+  CityBuildingDamageResult,
+  BuildingResult,
+  DistByDamage,
+  AllCitiesBuildingDamageResult,
+  CasualtyResult,
+  CombinedStats,
+  AttenuationResult,
+  TerrainBoundaryPoint,
+  BombType,
+  TerrainPreset,
+  IndoorSurvivalRate
+} from '../types';
+
+(function (global: Window) {
     'use strict';
 
-    const BOMB_TYPES = {
+    const BOMB_TYPES: { [key: string]: BombType } = {
         custom: { yield: 15000, name: '自定义' },
         little_boy: { yield: 15, name: '小男孩' },
         fat_man: { yield: 21, name: '胖子' },
@@ -12,21 +43,21 @@
         castle_bravo: { yield: 15000, name: '喝彩城堡' }
     };
 
-    const TERRAIN_FEATURE_TYPES = {
+    const TERRAIN_FEATURE_TYPES: { [key: string]: string } = {
         MOUNTAIN: 'mountain',
         HILL: 'hill',
         BASIN: 'basin',
         PLAIN: 'plain'
     };
 
-    const TERRAIN_PRESETS = {
+    const TERRAIN_PRESETS: { [key: string]: TerrainPreset } = {
         flat: { name: '平坦地形', mountainCount: 0, hillCount: 0, basinCount: 0, elevationScale: 0.0 },
         gentle: { name: '丘陵地形', mountainCount: 1, hillCount: 6, basinCount: 3, elevationScale: 0.5 },
         mountainous: { name: '多山地形', mountainCount: 4, hillCount: 4, basinCount: 2, elevationScale: 1.0 },
         extreme: { name: '极端地形', mountainCount: 6, hillCount: 8, basinCount: 4, elevationScale: 1.5 }
     };
 
-    const BUILDING_TYPES = {
+    const BUILDING_TYPES: { [key: string]: BuildingType } = {
         temporary: {
             name: '临时建筑',
             shortName: '临建',
@@ -155,9 +186,9 @@
         }
     };
 
-    const BUILDING_TYPE_ORDER = ['temporary', 'wood', 'brick', 'rc_frame', 'steel', 'rc_core', 'blast_resistant'];
+    const BUILDING_TYPE_ORDER: string[] = ['temporary', 'wood', 'brick', 'rc_frame', 'steel', 'rc_core', 'blast_resistant'];
 
-    const DAMAGE_LEVELS = {
+    const DAMAGE_LEVELS: { [key: string]: DamageLevel } = {
         intact: { name: '完好', color: '#4caf50', order: 0 },
         light: { name: '轻微破坏', color: '#ffeb3b', order: 1 },
         moderate: { name: '中度破坏', color: '#ff9800', order: 2 },
@@ -165,7 +196,7 @@
         destroyed: { name: '完全摧毁', color: '#9c27b0', order: 4 }
     };
 
-    function getBuildingDamageLevel(buildingType, overpressurePsi) {
+    function getBuildingDamageLevel(buildingType: string, overpressurePsi: number): DamageLevelKey {
         const bt = BUILDING_TYPES[buildingType];
         if (!bt) return 'destroyed';
 
@@ -178,14 +209,14 @@
         return 'intact';
     }
 
-    function getOverpressureAtDistance(yieldKilotons, distanceKm, burstHeight) {
+    function getOverpressureAtDistance(yieldKilotons: number, distanceKm: number, burstHeight: number): number {
         const W_megatons = yieldKilotons / 1000;
 
         if (distanceKm <= 0) return 100;
 
         const scaledDist = distanceKm / Math.pow(W_megatons, 1 / 3);
 
-        let overpressure;
+        let overpressure: number;
         if (scaledDist < 0.1) {
             overpressure = 200;
         } else if (scaledDist < 0.5) {
@@ -204,9 +235,9 @@
         return Math.max(0.01, overpressure);
     }
 
-    function calculateBuildingCasualties(population, buildingType, overpressurePsi, indoorRatio) {
+    function calculateBuildingCasualties(population: number, buildingType: string, overpressurePsi: number, indoorRatio?: number): BuildingCasualtyResult {
         const bt = BUILDING_TYPES[buildingType];
-        if (!bt) return { deaths: 0, injured: 0, damageLevel: 'destroyed' };
+        if (!bt) return { deaths: 0, injured: 0, damageLevel: 'destroyed', buildingType: buildingType, overpressure: overpressurePsi };
 
         const damageLevel = getBuildingDamageLevel(buildingType, overpressurePsi);
         const indoorPop = population * (indoorRatio !== undefined ? indoorRatio : 0.85);
@@ -219,15 +250,16 @@
         const outdoorDeaths = outdoorPop * Math.max(0, 1 - outdoorSurvival);
 
         const totalDeaths = indoorDeaths + outdoorDeaths;
-        const injuredRatio = {
+        const injuredRatio: { [key: string]: number } = {
             intact: 0.02,
             light: 0.08,
             moderate: 0.2,
             severe: 0.35,
             destroyed: 0.25
-        }[damageLevel] || 0;
+        };
+        const ratio = injuredRatio[damageLevel] || 0;
 
-        const totalInjured = population * injuredRatio * (1 - totalDeaths / population);
+        const totalInjured = population * ratio * (1 - totalDeaths / population);
 
         return {
             deaths: totalDeaths,
@@ -238,7 +270,7 @@
         };
     }
 
-    const DEFAULT_ZONE_DEFS = [
+    const DEFAULT_ZONE_DEFS: ZoneDef[] = [
         {
             key: 'fireball',
             label: '火球',
@@ -319,44 +351,44 @@
         }
     ];
 
-    let ZONE_DEFS = JSON.parse(JSON.stringify(DEFAULT_ZONE_DEFS));
+    let ZONE_DEFS: ZoneDef[] = JSON.parse(JSON.stringify(DEFAULT_ZONE_DEFS));
 
-    function getZones() {
+    function getZones(): ZoneDef[] {
         return JSON.parse(JSON.stringify(ZONE_DEFS));
     }
 
-    function getZoneKeys() {
-        return ZONE_DEFS.map(function (z) { return z.key; });
+    function getZoneKeys(): string[] {
+        return ZONE_DEFS.map(function (z: ZoneDef): string { return z.key; });
     }
 
-    function getZonePriority() {
-        return ZONE_DEFS.map(function (z) { return z.key; });
+    function getZonePriority(): string[] {
+        return ZONE_DEFS.map(function (z: ZoneDef): string { return z.key; });
     }
 
-    function getZoneAltitudeSensitivity() {
-        const result = {};
-        ZONE_DEFS.forEach(function (z) {
+    function getZoneAltitudeSensitivity(): { [key: string]: number } {
+        const result: { [key: string]: number } = {};
+        ZONE_DEFS.forEach(function (z: ZoneDef): void {
             result[z.key] = z.altitudeSensitivity;
         });
         return result;
     }
 
-    function getZoneByKey(key) {
-        return ZONE_DEFS.find(function (z) { return z.key === key; }) || null;
+    function getZoneByKey(key: string): ZoneDef | null {
+        return ZONE_DEFS.find(function (z: ZoneDef): boolean { return z.key === key; }) || null;
     }
 
-    function addZone(zoneDef) {
+    function addZone(zoneDef: Partial<ZoneDef> & { key: string; label: string }): { success: boolean; error?: string; zone?: ZoneDef } {
         if (!zoneDef || !zoneDef.key || !zoneDef.label) {
             return { success: false, error: '圈层key和label不能为空' };
         }
-        if (ZONE_DEFS.some(function (z) { return z.key === zoneDef.key; })) {
+        if (ZONE_DEFS.some(function (z: ZoneDef): boolean { return z.key === zoneDef.key; })) {
             return { success: false, error: '圈层key已存在' };
         }
 
-        const newZone = {
+        const newZone: ZoneDef = {
             key: zoneDef.key,
             label: zoneDef.label,
-            dash: zoneDef.dash || null,
+            dash: zoneDef.dash !== undefined ? zoneDef.dash : null,
             color: zoneDef.color || [128, 128, 128],
             altitudeSensitivity: zoneDef.altitudeSensitivity !== undefined ? zoneDef.altitudeSensitivity : 0.3,
             radiusFormula: zoneDef.radiusFormula || '1.0 * Math.pow(W, 0.4)',
@@ -371,14 +403,14 @@
         return { success: true, zone: newZone };
     }
 
-    function updateZone(key, updates) {
-        const zoneIndex = ZONE_DEFS.findIndex(function (z) { return z.key === key; });
+    function updateZone(key: string, updates: Partial<ZoneDef>): { success: boolean; error?: string; zone?: ZoneDef } {
+        const zoneIndex = ZONE_DEFS.findIndex(function (z: ZoneDef): boolean { return z.key === key; });
         if (zoneIndex < 0) {
             return { success: false, error: '圈层不存在' };
         }
 
         if (updates.key && updates.key !== key) {
-            if (ZONE_DEFS.some(function (z) { return z.key === updates.key; })) {
+            if (ZONE_DEFS.some(function (z: ZoneDef): boolean { return z.key === updates.key; })) {
                 return { success: false, error: '新的key已存在' };
             }
         }
@@ -396,8 +428,8 @@
         return { success: true, zone: ZONE_DEFS[zoneIndex] };
     }
 
-    function removeZone(key) {
-        const zoneIndex = ZONE_DEFS.findIndex(function (z) { return z.key === key; });
+    function removeZone(key: string): { success: boolean; error?: string; zone?: ZoneDef } {
+        const zoneIndex = ZONE_DEFS.findIndex(function (z: ZoneDef): boolean { return z.key === key; });
         if (zoneIndex < 0) {
             return { success: false, error: '圈层不存在' };
         }
@@ -409,13 +441,13 @@
         return { success: true, zone: removed };
     }
 
-    function resetZones() {
+    function resetZones(): { success: boolean; zones: ZoneDef[] } {
         ZONE_DEFS = JSON.parse(JSON.stringify(DEFAULT_ZONE_DEFS));
         return { success: true, zones: ZONE_DEFS };
     }
 
-    function moveZone(key, newIndex) {
-        const zoneIndex = ZONE_DEFS.findIndex(function (z) { return z.key === key; });
+    function moveZone(key: string, newIndex: number): { success: boolean; error?: string; zone?: ZoneDef } {
+        const zoneIndex = ZONE_DEFS.findIndex(function (z: ZoneDef): boolean { return z.key === key; });
         if (zoneIndex < 0) {
             return { success: false, error: '圈层不存在' };
         }
@@ -430,7 +462,7 @@
         return { success: true, zone: removed };
     }
 
-    function calculateZoneRadius(zone, W_megatons, burstHeight) {
+    function calculateZoneRadius(zone: ZoneDef, W_megatons: number, burstHeight: number): number {
         try {
             const W = W_megatons;
             const height = burstHeight;
@@ -461,19 +493,19 @@
         }
     }
 
-    function calculateRadii(yieldKilotons, burstHeight) {
+    function calculateRadii(yieldKilotons: number, burstHeight: number): ExplosionRadii {
         const W_megatons = yieldKilotons / 1000;
-        const result = {};
+        const result: ExplosionRadii = {};
 
-        ZONE_DEFS.forEach(function (zone) {
+        ZONE_DEFS.forEach(function (zone: ZoneDef): void {
             result[zone.key] = calculateZoneRadius(zone, W_megatons, burstHeight);
         });
 
         return result;
     }
 
-    function generateBuildingDistribution(isCentral, size) {
-        const dist = {};
+    function generateBuildingDistribution(isCentral: boolean, size: number): BuildingDistribution {
+        const dist: BuildingDistribution = {};
 
         if (isCentral) {
             dist.temporary = 0.02;
@@ -511,21 +543,21 @@
 
         const jitter = 0.03;
         let total = 0;
-        BUILDING_TYPE_ORDER.forEach(function (type) {
+        BUILDING_TYPE_ORDER.forEach(function (type: string): void {
             const jitterAmount = (Math.random() - 0.5) * 2 * jitter;
             dist[type] = Math.max(0.01, dist[type] + jitterAmount);
             total += dist[type];
         });
 
-        BUILDING_TYPE_ORDER.forEach(function (type) {
+        BUILDING_TYPE_ORDER.forEach(function (type: string): void {
             dist[type] = dist[type] / total;
         });
 
         return dist;
     }
 
-    function generateCities(width, height) {
-        const cities = [];
+    function generateCities(width: number, height: number): City[] {
+        const cities: City[] = [];
         const cityCount = 80;
         const centerX = width / 2;
         const centerY = height / 2;
@@ -552,7 +584,7 @@
             }
         }
 
-        const centralCity = {
+        const centralCity: City = {
             x: centerX + (Math.random() - 0.5) * 100,
             y: centerY + (Math.random() - 0.5) * 100,
             size: 55,
@@ -566,14 +598,14 @@
         return cities;
     }
 
-    function getCityName(index) {
+    function getCityName(index: number): string {
         const prefixes = ['北', '南', '东', '西', '中', '新', '古', '大', '小', '青'];
         const suffixes = ['京', '城', '都', '市', '镇', '港', '州', '府', '里', '区'];
         return prefixes[index % prefixes.length] + suffixes[Math.floor(index / prefixes.length) % suffixes.length];
     }
 
-    function generateRoads(width, height, cities) {
-        const roads = [];
+    function generateRoads(width: number, height: number, cities: City[]): Road[] {
+        const roads: Road[] = [];
         for (let i = 0; i < cities.length; i++) {
             for (let j = i + 1; j < Math.min(i + 3, cities.length); j++) {
                 if (Math.random() < 0.3) {
@@ -589,11 +621,11 @@
         return roads;
     }
 
-    function getWorstZoneForCity(city, explosions, scale) {
+    function getWorstZoneForCity(city: City, explosions: Explosion[], scale: number): string | null {
         const zonePriority = getZonePriority();
         let worstZoneIndex = -1;
 
-        explosions.forEach(function (exp) {
+        explosions.forEach(function (exp: Explosion): void {
             if (!exp.explosionCenter || !exp.radii) return;
             const dx = city.x - exp.explosionCenter.x;
             const dy = city.y - exp.explosionCenter.y;
@@ -614,7 +646,7 @@
         return worstZoneIndex >= 0 ? zonePriority[worstZoneIndex] : null;
     }
 
-    function calculateCasualtiesForZone(pop, zoneName) {
+    function calculateCasualtiesForZone(pop: number, zoneName: string): CasualtyResult {
         const zone = getZoneByKey(zoneName);
         if (zone && zone.casualtyRates) {
             return {
@@ -626,19 +658,19 @@
         return { deaths: 0, injured: 0, destroyed: false };
     }
 
-    function calculateCityBuildingDamage(city, explosions, scale, terrain) {
+    function calculateCityBuildingDamage(city: City, explosions: Explosion[], scale: number, terrain?: TerrainData): CityBuildingDamageResult {
         let maxOverpressure = 0;
-        let worstSpecialZone = null;
+        let worstSpecialZone: string | null = null;
         let maxSpecialOverpressure = 0;
         let additionalRadiationDeaths = 0;
         let additionalRadiationInjured = 0;
 
         const zones = getZones();
-        const specialZoneKeys = zones.filter(function (z) {
+        const specialZoneKeys = zones.filter(function (z: ZoneDef): boolean {
             return z.casualtyRates && z.casualtyRates.destroyed;
-        }).map(function (z) { return z.key; });
+        }).map(function (z: ZoneDef): string { return z.key; });
 
-        explosions.forEach(function (exp) {
+        explosions.forEach(function (exp: Explosion): void {
             if (!exp.explosionCenter || !exp.radii) return;
             const dx = city.x - exp.explosionCenter.x;
             const dy = city.y - exp.explosionCenter.y;
@@ -647,7 +679,7 @@
 
             let effectiveDistKm = distKm;
             if (terrain && terrain.features && terrain.features.length > 0) {
-                const firstDestructiveZone = zones.find(function (z) {
+                const firstDestructiveZone = zones.find(function (z: ZoneDef): boolean {
                     return z.casualtyRates && z.casualtyRates.destroyed;
                 });
                 const attenuationResult = calculatePathAttenuation(
@@ -663,8 +695,8 @@
                 maxOverpressure = op;
             }
 
-            zones.forEach(function (zone) {
-                if (exp.radii[zone.key] !== undefined && distKm <= exp.radii[zone.key]) {
+            zones.forEach(function (zone: ZoneDef): void {
+                if (exp.radii![zone.key] !== undefined && distKm <= exp.radii![zone.key]) {
                     if (zone.casualtyRates && zone.casualtyRates.destroyed) {
                         if (zone.overpressureThreshold > maxSpecialOverpressure) {
                             maxSpecialOverpressure = zone.overpressureThreshold;
@@ -679,13 +711,13 @@
             });
         });
 
-        const buildingResults = {};
+        const buildingResults: { [key: string]: BuildingResult } = {};
         let totalDeaths = 0;
         let totalInjured = 0;
         let totalDestroyedPop = 0;
         let totalAffectedPop = 0;
 
-        const distByDamage = {
+        const distByDamage: DistByDamage = {
             intact: 0,
             light: 0,
             moderate: 0,
@@ -693,7 +725,7 @@
             destroyed: 0
         };
 
-        BUILDING_TYPE_ORDER.forEach(function (buildingType) {
+        BUILDING_TYPE_ORDER.forEach(function (buildingType: string): void {
             const ratio = city.buildingDistribution[buildingType] || 0;
             const popInBuilding = city.population * ratio;
 
@@ -750,10 +782,10 @@
         };
     }
 
-    function calculateAvgStructureFactor(buildingDistribution) {
+    function calculateAvgStructureFactor(buildingDistribution: BuildingDistribution): number {
         let total = 0;
         let weightedSum = 0;
-        BUILDING_TYPE_ORDER.forEach(function (type) {
+        BUILDING_TYPE_ORDER.forEach(function (type: string): void {
             const ratio = buildingDistribution[type] || 0;
             if (ratio > 0) {
                 const bt = BUILDING_TYPES[type];
@@ -764,13 +796,13 @@
         return total > 0 ? weightedSum / total : 0.5;
     }
 
-    function calculateAllCitiesBuildingDamage(cities, explosions, scale, terrain) {
-        const results = [];
+    function calculateAllCitiesBuildingDamage(cities: City[], explosions: Explosion[], scale: number, terrain?: TerrainData): AllCitiesBuildingDamageResult {
+        const results: CityBuildingDamageResult[] = [];
         let totalDeaths = 0;
         let totalInjured = 0;
         let totalDestroyedPop = 0;
 
-        const totalByDamage = {
+        const totalByDamage: DistByDamage = {
             intact: 0,
             light: 0,
             moderate: 0,
@@ -778,12 +810,12 @@
             destroyed: 0
         };
 
-        const totalByBuildingType = {};
-        BUILDING_TYPE_ORDER.forEach(function (type) {
+        const totalByBuildingType: { [key: string]: { population: number; deaths: number; injured: number } } = {};
+        BUILDING_TYPE_ORDER.forEach(function (type: string): void {
             totalByBuildingType[type] = { population: 0, deaths: 0, injured: 0 };
         });
 
-        cities.forEach(function (city) {
+        cities.forEach(function (city: City): void {
             const result = calculateCityBuildingDamage(city, explosions, scale, terrain);
             results.push(result);
 
@@ -791,11 +823,11 @@
             totalInjured += result.totalInjured;
             totalDestroyedPop += result.totalDestroyedPop;
 
-            Object.keys(totalByDamage).forEach(function (level) {
-                totalByDamage[level] += result.distByDamage[level] || 0;
+            Object.keys(totalByDamage).forEach(function (level: string): void {
+                totalByDamage[level as DamageLevelKey] += result.distByDamage[level as DamageLevelKey] || 0;
             });
 
-            BUILDING_TYPE_ORDER.forEach(function (type) {
+            BUILDING_TYPE_ORDER.forEach(function (type: string): void {
                 if (result.buildingResults[type]) {
                     totalByBuildingType[type].population += result.buildingResults[type].population;
                     totalByBuildingType[type].deaths += result.buildingResults[type].deaths;
@@ -808,7 +840,7 @@
             }
         });
 
-        const totalPopulation = cities.reduce(function (sum, city) {
+        const totalPopulation = cities.reduce(function (sum: number, city: City): number {
             return sum + city.population;
         }, 0);
 
@@ -824,7 +856,7 @@
         };
     }
 
-    function calculateCasualties(cities, explosionCenter, radii, scale) {
+    function calculateCasualties(cities: City[], explosionCenter: Point | null, radii: ExplosionRadii | null, scale: number): CasualtyResult {
         let deaths = 0;
         let injured = 0;
 
@@ -833,31 +865,31 @@
         }
 
         const r = radii;
-        cities.forEach(function (city) {
+        cities.forEach(function (city: City): void {
             const dx = city.x - explosionCenter.x;
             const dy = city.y - explosionCenter.y;
             const distPx = Math.sqrt(dx * dx + dy * dy);
             const distKm = distPx / scale;
             const pop = city.population;
 
-            if (distKm <= r.fireball) {
+            if (distKm <= r!.fireball) {
                 deaths += pop * 0.99;
                 city.destroyed = true;
-            } else if (distKm <= r.radiation) {
+            } else if (distKm <= r!.radiation) {
                 deaths += pop * 0.85;
                 injured += pop * 0.1;
                 city.destroyed = true;
-            } else if (distKm <= r.severe) {
+            } else if (distKm <= r!.severe) {
                 deaths += pop * 0.5;
                 injured += pop * 0.4;
                 city.destroyed = true;
-            } else if (distKm <= r.moderate) {
+            } else if (distKm <= r!.moderate) {
                 deaths += pop * 0.15;
                 injured += pop * 0.5;
-            } else if (distKm <= r.light) {
+            } else if (distKm <= r!.light) {
                 deaths += pop * 0.02;
                 injured += pop * 0.2;
-            } else if (distKm <= r.thermal) {
+            } else if (distKm <= r!.thermal) {
                 injured += pop * 0.05;
             }
         });
@@ -868,7 +900,7 @@
         };
     }
 
-    function calculateCombinedCasualties(cities, explosions, scale) {
+    function calculateCombinedCasualties(cities: City[], explosions: Explosion[], scale: number): CasualtyResult {
         let deaths = 0;
         let injured = 0;
 
@@ -876,7 +908,7 @@
             return { deaths: 0, injured: 0 };
         }
 
-        cities.forEach(function (city) {
+        cities.forEach(function (city: City): void {
             const worstZone = getWorstZoneForCity(city, explosions, scale);
             if (!worstZone) return;
 
@@ -893,23 +925,23 @@
         };
     }
 
-    function calculateEnergy(yieldKilotons) {
+    function calculateEnergy(yieldKilotons: number): number {
         return Math.round(yieldKilotons * 4.184);
     }
 
-    function calculateTotalEnergy(explosions) {
+    function calculateTotalEnergy(explosions: Explosion[]): number {
         let total = 0;
-        explosions.forEach(function (exp) {
+        explosions.forEach(function (exp: Explosion): void {
             total += calculateEnergy(exp.yieldKilotons);
         });
         return Math.round(total);
     }
 
-    function calculateAffectedArea(radii) {
+    function calculateAffectedArea(radii: ExplosionRadii): number {
         return Math.round(Math.PI * radii.thermal * radii.thermal);
     }
 
-    function circleIntersectionArea(d, r1, r2) {
+    function circleIntersectionArea(d: number, r1: number, r2: number): number {
         if (d >= r1 + r2) return 0;
         if (d <= Math.abs(r1 - r2)) return Math.PI * Math.min(r1, r2) * Math.min(r1, r2);
 
@@ -927,13 +959,13 @@
         return part1 + part2 - part3;
     }
 
-    function calculateCircleUnionAreaInclusion(circles) {
+    function calculateCircleUnionAreaInclusion(circles: { x: number; y: number; r: number }[]): number {
         const n = circles.length;
         if (n === 0) return 0;
         if (n === 1) return Math.PI * circles[0].r * circles[0].r;
 
         let totalArea = 0;
-        circles.forEach(function (c) {
+        circles.forEach(function (c: { x: number; y: number; r: number }): void {
             totalArea += Math.PI * c.r * c.r;
         });
 
@@ -949,9 +981,9 @@
         return Math.max(0, totalArea);
     }
 
-    function calculateCombinedAreaPerZone(explosions, scale, zoneName) {
-        const circles = [];
-        explosions.forEach(function (exp) {
+    function calculateCombinedAreaPerZone(explosions: Explosion[], scale: number, zoneName: string): number {
+        const circles: { x: number; y: number; r: number }[] = [];
+        explosions.forEach(function (exp: Explosion): void {
             if (!exp.explosionCenter || !exp.radii) return;
             const radiusPx = exp.radii[zoneName] * scale;
             circles.push({
@@ -967,30 +999,30 @@
         return Math.round(unionAreaPx * km2PerPx2);
     }
 
-    function calculateCombinedArea(explosions, scale) {
+    function calculateCombinedArea(explosions: Explosion[], scale: number): number {
         return calculateCombinedAreaPerZone(explosions, scale, 'thermal');
     }
 
-    function calculateTotalAreaSum(explosions) {
+    function calculateTotalAreaSum(explosions: Explosion[]): number {
         let total = 0;
-        explosions.forEach(function (exp) {
+        explosions.forEach(function (exp: Explosion): void {
             if (!exp.radii) return;
             total += calculateAffectedArea(exp.radii);
         });
         return total;
     }
 
-    function calculateOverlapArea(explosions, scale) {
+    function calculateOverlapArea(explosions: Explosion[], scale: number): number {
         const combined = calculateCombinedArea(explosions, scale);
         const sum = calculateTotalAreaSum(explosions);
         return Math.max(0, sum - combined);
     }
 
-    function calculateAllCombinedStats(explosions, scale) {
+    function calculateAllCombinedStats(explosions: Explosion[], scale: number): CombinedStats {
         const thermalCombined = calculateCombinedAreaPerZone(explosions, scale, 'thermal');
         const totalArea = calculateTotalAreaSum(explosions);
         return {
-            count: explosions.filter(function (e) { return e.explosionCenter; }).length,
+            count: explosions.filter(function (e: Explosion): boolean { return e.explosionCenter !== null; }).length,
             combinedArea: thermalCombined,
             totalArea: totalArea,
             overlapArea: Math.max(0, totalArea - thermalCombined),
@@ -1006,8 +1038,8 @@
         };
     }
 
-    function mulberry32(seed) {
-        return function () {
+    function mulberry32(seed: number): () => number {
+        return function (): number {
             let t = seed += 0x6D2B79F5;
             t = Math.imul(t ^ (t >>> 15), t | 1);
             t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
@@ -1015,22 +1047,22 @@
         };
     }
 
-    function generateTerrainFeatures(width, height, presetName, elevationScale, seed) {
+    function generateTerrainFeatures(width: number, height: number, presetName: string, elevationScale: number, seed: number): TerrainData {
         const preset = TERRAIN_PRESETS[presetName] || TERRAIN_PRESETS.flat;
         const rand = mulberry32(seed || Date.now() & 0xffffffff);
         const scale = (elevationScale !== undefined ? elevationScale : 1) * preset.elevationScale;
 
-        const features = [];
+        const features: TerrainFeature[] = [];
 
-        function addFeature(type, x, y, radius, height) {
+        function addFeature(type: string, x: number, y: number, radius: number, heightVal: number): void {
             features.push({
                 type: type,
                 x: x,
                 y: y,
                 radius: radius,
-                height: height * scale,
+                height: heightVal * scale,
                 width: radius * 2,
-                heightPx: height * scale
+                heightPx: heightVal * scale
             });
         }
 
@@ -1080,18 +1112,18 @@
         };
     }
 
-    function getElevationAt(x, y, terrain) {
+    function getElevationAt(x: number, y: number, terrain: TerrainData): number {
         if (!terrain || !terrain.features || terrain.features.length === 0) return 0;
 
         let elevation = 0;
-        terrain.features.forEach(function (f) {
+        terrain.features.forEach(function (f: TerrainFeature): void {
             const dx = x - f.x;
             const dy = y - f.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
             if (dist >= f.radius * 2.5) return;
 
             const normDist = dist / f.radius;
-            let factor;
+            let factor: number;
 
             if (f.type === TERRAIN_FEATURE_TYPES.MOUNTAIN) {
                 if (normDist < 0.3) {
@@ -1121,6 +1153,8 @@
                 } else {
                     factor = 0;
                 }
+            } else {
+                factor = 0;
             }
 
             elevation += f.heightPx * factor;
@@ -1129,7 +1163,7 @@
         return elevation;
     }
 
-    function calculatePathAttenuation(fromX, fromY, toX, toY, terrain, zoneName, scale, burstHeightMeters) {
+    function calculatePathAttenuation(fromX: number, fromY: number, toX: number, toY: number, terrain: TerrainData, zoneName: string, scale: number, burstHeightMeters: number): AttenuationResult {
         if (!terrain || !terrain.features || terrain.features.length === 0) {
             return { attenuation: 1, maxObstacleHeight: 0, pathLengthKm: 0 };
         }
@@ -1199,7 +1233,7 @@
         };
     }
 
-    function calculateEffectiveRadius(explosion, targetX, targetY, zoneName, terrain, scale) {
+    function calculateEffectiveRadius(explosion: Explosion, targetX: number, targetY: number, zoneName: string, terrain: TerrainData, scale: number): number {
         const baseRadius = explosion.radii ? explosion.radii[zoneName] : 0;
         if (!explosion.explosionCenter || baseRadius <= 0) return 0;
 
@@ -1214,7 +1248,7 @@
         return baseRadius * result.attenuation;
     }
 
-    function generateTerrainBoundaryPolygon(explosion, zoneName, terrain, scale, segments) {
+    function generateTerrainBoundaryPolygon(explosion: Explosion, zoneName: string, terrain: TerrainData, scale: number, segments?: number): TerrainBoundaryPoint[] | null {
         if (!explosion.explosionCenter || !explosion.radii) return null;
 
         const segs = segments || 72;
@@ -1222,7 +1256,7 @@
         const cx = explosion.explosionCenter.x;
         const cy = explosion.explosionCenter.y;
 
-        const points = [];
+        const points: TerrainBoundaryPoint[] = [];
         for (let i = 0; i < segs; i++) {
             const angle = (i / segs) * Math.PI * 2;
             const targetX = cx + Math.cos(angle) * baseRadius;
@@ -1245,11 +1279,11 @@
         return points;
     }
 
-    function checkPointInAnyZoneTerrainAware(point, explosions, terrain, scale) {
+    function checkPointInAnyZoneTerrainAware(point: Point, explosions: Explosion[], terrain: TerrainData, scale: number): string | null {
         let worstZoneIndex = -1;
-        let worstExplosionId = null;
+        let worstExplosionId: number | null = null;
 
-        explosions.forEach(function (exp) {
+        explosions.forEach(function (exp: Explosion): void {
             if (!exp.explosionCenter || !exp.radii) return;
 
             const dx = point.x - exp.explosionCenter.x;
@@ -1276,14 +1310,14 @@
         return worstZoneIndex >= 0 ? zonePriorityFinal[worstZoneIndex] : null;
     }
 
-    function getWorstZoneForCityTerrain(city, explosions, scale, terrain) {
+    function getWorstZoneForCityTerrain(city: City, explosions: Explosion[], scale: number, terrain: TerrainData): string | null {
         if (!terrain || !terrain.features || terrain.features.length === 0) {
             return getWorstZoneForCity(city, explosions, scale);
         }
         return checkPointInAnyZoneTerrainAware(city, explosions, terrain, scale);
     }
 
-    function calculateCasualtiesTerrainAware(cities, explosions, scale, terrain) {
+    function calculateCasualtiesTerrainAware(cities: City[], explosions: Explosion[], scale: number, terrain: TerrainData): CasualtyResult {
         let deaths = 0;
         let injured = 0;
 
@@ -1293,7 +1327,7 @@
 
         const useTerrain = terrain && terrain.features && terrain.features.length > 0;
 
-        cities.forEach(function (city) {
+        cities.forEach(function (city: City): void {
             const worstZone = useTerrain
                 ? checkPointInAnyZoneTerrainAware(city, explosions, terrain, scale)
                 : getWorstZoneForCity(city, explosions, scale);
@@ -1312,7 +1346,7 @@
         };
     }
 
-    function calculateShockwaveRadiusAtAngle(explosion, angle, zoneKey, terrain, scale, baseRadiusPx) {
+    function calculateShockwaveRadiusAtAngle(explosion: Explosion, angle: number, zoneKey: string, terrain: TerrainData, scale: number, baseRadiusPx: number): number {
         if (!terrain || !terrain.features || terrain.features.length === 0) {
             return baseRadiusPx;
         }
@@ -1335,14 +1369,14 @@
     const VEHICLE_SPEED_KMH = 60;
     const PEOPLE_PER_VEHICLE = 3;
 
-    function buildEvacuationGraph(cities, shelters, roads, capacityMultiplier) {
+    function buildEvacuationGraph(cities: City[], shelters: Shelter[], roads: Road[], capacityMultiplier?: number): { nodes: EvacuationNode[]; nodeMap: { [key: string]: number } } {
         const capMult = capacityMultiplier !== undefined ? capacityMultiplier : 1;
-        const nodes = [];
-        const nodeMap = {};
+        const nodes: EvacuationNode[] = [];
+        const nodeMap: { [key: string]: number } = {};
         let nodeId = 0;
 
-        cities.forEach(function (city, idx) {
-            const node = {
+        cities.forEach(function (city: City, idx: number): void {
+            const node: EvacuationNode = {
                 id: nodeId,
                 type: 'city',
                 ref: city,
@@ -1357,8 +1391,8 @@
             nodeId++;
         });
 
-        shelters.forEach(function (shelter, idx) {
-            const node = {
+        shelters.forEach(function (shelter: Shelter, idx: number): void {
+            const node: EvacuationNode = {
                 id: nodeId,
                 type: 'shelter',
                 ref: shelter,
@@ -1373,13 +1407,13 @@
             nodeId++;
         });
 
-        roads.forEach(function (road) {
+        roads.forEach(function (road: Road): void {
             const dx = road.x2 - road.x1;
             const dy = road.y2 - road.y1;
             const lengthPx = Math.sqrt(dx * dx + dy * dy);
 
-            let node1Id = null, node2Id = null;
-            nodes.forEach(function (node) {
+            let node1Id: number | null = null, node2Id: number | null = null;
+            nodes.forEach(function (node: EvacuationNode): void {
                 const d1 = Math.sqrt(Math.pow(node.x - road.x1, 2) + Math.pow(node.y - road.y1, 2));
                 const d2 = Math.sqrt(Math.pow(node.x - road.x2, 2) + Math.pow(node.y - road.y2, 2));
                 if (d1 < 30) node1Id = node.id;
@@ -1389,7 +1423,7 @@
             if (node1Id !== null && node2Id !== null) {
                 const capacity = (road.capacity || ROAD_BASE_CAPACITY) * capMult;
                 const lanes = road.lanes || 2;
-                const edge1 = {
+                const edge1: EvacuationEdge = {
                     from: node1Id,
                     to: node2Id,
                     lengthPx: lengthPx,
@@ -1398,7 +1432,7 @@
                     flow: 0,
                     density: 0
                 };
-                const edge2 = {
+                const edge2: EvacuationEdge = {
                     from: node2Id,
                     to: node1Id,
                     lengthPx: lengthPx,
@@ -1412,8 +1446,8 @@
             }
         });
 
-        nodes.forEach(function (node, i) {
-            nodes.forEach(function (other, j) {
+        nodes.forEach(function (node: EvacuationNode, i: number): void {
+            nodes.forEach(function (other: EvacuationNode, j: number): void {
                 if (i === j) return;
                 if (node.type !== 'city' || other.type !== 'city') return;
 
@@ -1422,7 +1456,7 @@
                 const dist = Math.sqrt(dx * dx + dy * dy);
 
                 let hasEdge = false;
-                node.edges.forEach(function (e) {
+                node.edges.forEach(function (e: EvacuationEdge): void {
                     if (e.to === other.id) hasEdge = true;
                 });
 
@@ -1444,13 +1478,13 @@
         return { nodes: nodes, nodeMap: nodeMap };
     }
 
-    function dijkstra(graph, sourceId) {
-        const dist = {};
-        const prev = {};
-        const visited = {};
+    function dijkstra(graph: { nodes: EvacuationNode[]; nodeMap: { [key: string]: number } }, sourceId: number): { dist: { [key: number]: number }; prev: { [key: number]: { from: number; edge: EvacuationEdge } | null } } {
+        const dist: { [key: number]: number } = {};
+        const prev: { [key: number]: { from: number; edge: EvacuationEdge } | null } = {};
+        const visited: { [key: number]: boolean } = {};
         const nodes = graph.nodes;
 
-        nodes.forEach(function (node) {
+        nodes.forEach(function (node: EvacuationNode): void {
             dist[node.id] = Infinity;
             prev[node.id] = null;
             visited[node.id] = false;
@@ -1459,9 +1493,9 @@
 
         while (true) {
             let minDist = Infinity;
-            let currentId = null;
+            let currentId: number | null = null;
 
-            nodes.forEach(function (node) {
+            nodes.forEach(function (node: EvacuationNode): void {
                 if (!visited[node.id] && dist[node.id] < minDist) {
                     minDist = dist[node.id];
                     currentId = node.id;
@@ -1471,13 +1505,14 @@
             if (currentId === null) break;
             visited[currentId] = true;
 
-            const currentNode = nodes[currentId];
-            currentNode.edges.forEach(function (edge) {
+            const currId = currentId;
+            const currentNode = nodes[currId];
+            currentNode.edges.forEach(function (edge: EvacuationEdge): void {
                 if (visited[edge.to]) return;
-                const alt = dist[currentId] + edge.lengthPx;
+                const alt = dist[currId] + edge.lengthPx;
                 if (alt < dist[edge.to]) {
                     dist[edge.to] = alt;
-                    prev[edge.to] = { from: currentId, edge: edge };
+                    prev[edge.to] = { from: currId, edge: edge };
                 }
             });
         }
@@ -1485,13 +1520,13 @@
         return { dist: dist, prev: prev };
     }
 
-    function findNearestShelter(graph, cityNodeId) {
+    function findNearestShelter(graph: { nodes: EvacuationNode[]; nodeMap: { [key: string]: number } }, cityNodeId: number): { shelterId: number | null; distancePx: number; path: EvacuationEdge[] | null } {
         const nodes = graph.nodes;
-        let nearestShelterId = null;
+        let nearestShelterId: number | null = null;
         let minDist = Infinity;
-        let shortestPath = null;
+        let shortestPath: EvacuationEdge[] | null = null;
 
-        nodes.forEach(function (node) {
+        nodes.forEach(function (node: EvacuationNode): void {
             if (node.type !== 'shelter') return;
 
             const result = dijkstra(graph, cityNodeId);
@@ -1501,11 +1536,11 @@
                 minDist = dist;
                 nearestShelterId = node.id;
 
-                const path = [];
+                const path: EvacuationEdge[] = [];
                 let curr = node.id;
                 while (result.prev[curr]) {
-                    path.unshift(result.prev[curr].edge);
-                    curr = result.prev[curr].from;
+                    path.unshift(result.prev[curr]!.edge);
+                    curr = result.prev[curr]!.from;
                 }
                 shortestPath = path;
             }
@@ -1518,21 +1553,30 @@
         };
     }
 
-    function calculateEvacuationPlan(cities, shelters, roads, scale, warningTimeMinutes, roadCapacityMultiplier, vehicleSpeedKmh) {
+    function calculateEvacuationPlan(cities: City[], shelters: Shelter[], roads: Road[], scale: number, warningTimeMinutes: number, roadCapacityMultiplier: number, vehicleSpeedKmh: number): {
+        graph: { nodes: EvacuationNode[]; nodeMap: { [key: string]: number } };
+        cityPlans: any[];
+        roadDensities: any[];
+        totalPopulation: number;
+        totalEvacuated: number;
+        totalStranded: number;
+        evacuationRate: number;
+        strandedRate: number;
+    } {
         const capMult = roadCapacityMultiplier !== undefined ? roadCapacityMultiplier : 1;
         const vehSpeed = vehicleSpeedKmh !== undefined ? vehicleSpeedKmh : VEHICLE_SPEED_KMH;
 
         const graph = buildEvacuationGraph(cities, shelters, roads, capMult);
         const nodes = graph.nodes;
-        const roadUsage = {};
-        const cityPlans = [];
+        const roadUsage: { [key: string]: any } = {};
+        const cityPlans: any[] = [];
         let totalPopulation = 0;
         let totalEvacuated = 0;
         let totalStranded = 0;
 
         const warningTimeHours = warningTimeMinutes / 60;
 
-        cities.forEach(function (city, cityIdx) {
+        cities.forEach(function (city: City, cityIdx: number): void {
             const cityNodeId = graph.nodeMap['city_' + cityIdx];
             const cityNode = nodes[cityNodeId];
             totalPopulation += city.population;
@@ -1555,7 +1599,7 @@
             }
 
             let totalLengthPx = 0;
-            nearest.path.forEach(function (edge) {
+            nearest.path.forEach(function (edge: EvacuationEdge): void {
                 totalLengthPx += edge.lengthPx;
             });
             const distanceKm = totalLengthPx / scale;
@@ -1565,7 +1609,7 @@
 
             let roadCapacityFactor = 1;
             let minCapacityRatio = 1;
-            nearest.path.forEach(function (edge) {
+            nearest.path.forEach(function (edge: EvacuationEdge): void {
                 const capacityPerHour = edge.capacity * PEOPLE_PER_VEHICLE;
                 const requiredFlow = city.population / travelTimeHours;
                 const ratio = capacityPerHour / requiredFlow;
@@ -1573,7 +1617,7 @@
             });
             roadCapacityFactor = Math.min(1, minCapacityRatio);
 
-            let evacuated;
+            let evacuated: number;
             if (canEvacuate) {
                 evacuated = Math.floor(city.population * Math.min(1, roadCapacityFactor * 0.8));
             } else {
@@ -1582,7 +1626,7 @@
             }
             const stranded = city.population - evacuated;
 
-            nearest.path.forEach(function (edge) {
+            nearest.path.forEach(function (edge: EvacuationEdge): void {
                 const key = edge.from + '_' + edge.to;
                 const reverseKey = edge.to + '_' + edge.from;
                 if (!roadUsage[key]) {
@@ -1616,8 +1660,8 @@
             });
         });
 
-        const roadDensities = [];
-        Object.keys(roadUsage).forEach(function (key) {
+        const roadDensities: any[] = [];
+        Object.keys(roadUsage).forEach(function (key: string): void {
             const usage = roadUsage[key];
             roadDensities.push({
                 edge: usage.edge,
@@ -1638,8 +1682,8 @@
         };
     }
 
-    function generateShelters(width, height, count) {
-        const shelters = [];
+    function generateShelters(width: number, height: number, count: number): Shelter[] {
+        const shelters: Shelter[] = [];
         const n = count || 3;
         const centerX = width / 2;
         const centerY = height / 2;
@@ -1656,26 +1700,26 @@
                 y: Math.max(50, Math.min(height - 50, y)),
                 capacity: 500000 + Math.floor(Math.random() * 500000),
                 name: '避难所 #' + (i + 1)
-            });
+            } as any);
         }
 
         return shelters;
     }
 
-    function generateRoadNetwork(width, height, cities, shelters) {
-        const roads = [];
-        const allNodes = [];
+    function generateRoadNetwork(width: number, height: number, cities: City[], shelters: Shelter[]): Road[] {
+        const roads: Road[] = [];
+        const allNodes: { x: number; y: number; type: string; index: number }[] = [];
 
-        cities.forEach(function (city, i) {
+        cities.forEach(function (city: City, i: number): void {
             allNodes.push({ x: city.x, y: city.y, type: 'city', index: i });
         });
 
-        shelters.forEach(function (shelter, i) {
+        shelters.forEach(function (shelter: Shelter, i: number): void {
             allNodes.push({ x: shelter.x, y: shelter.y, type: 'shelter', index: i });
         });
 
         for (let i = 0; i < allNodes.length; i++) {
-            const distances = [];
+            const distances: { index: number; dist: number }[] = [];
             for (let j = 0; j < allNodes.length; j++) {
                 if (i === j) continue;
                 const dx = allNodes[j].x - allNodes[i].x;
@@ -1683,7 +1727,7 @@
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 distances.push({ index: j, dist: dist });
             }
-            distances.sort(function (a, b) { return a.dist - b.dist; });
+            distances.sort(function (a: { index: number; dist: number }, b: { index: number; dist: number }): number { return a.dist - b.dist; });
 
             const connectCount = allNodes[i].type === 'shelter' ? 4 : 2;
             for (let k = 0; k < Math.min(connectCount, distances.length); k++) {
@@ -1691,7 +1735,7 @@
                 if (j <= i) continue;
 
                 let exists = false;
-                roads.forEach(function (r) {
+                roads.forEach(function (r: Road): void {
                     if ((r.x1 === allNodes[i].x && r.y1 === allNodes[i].y && r.x2 === allNodes[j].x && r.y2 === allNodes[j].y) ||
                         (r.x2 === allNodes[i].x && r.y2 === allNodes[i].y && r.x1 === allNodes[j].x && r.y1 === allNodes[j].y)) {
                         exists = true;
@@ -1775,6 +1819,6 @@
         calculateAllCombinedStats: calculateAllCombinedStats,
         calculateCombinedAreaPerZone: calculateCombinedAreaPerZone,
         mulberry32: mulberry32
-    };
+    } as any;
 
 })(window);

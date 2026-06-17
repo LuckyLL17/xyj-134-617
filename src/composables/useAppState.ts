@@ -85,7 +85,7 @@ export function useAppState() {
 
   function initApp() {
     if (typeof window !== 'undefined' && window.Physics) {
-      zones.value = window.Physics.defaultZones || []
+      zones.value = window.Physics.getZones() as any || []
     }
   }
 

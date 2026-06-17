@@ -1,18 +1,64 @@
-(function (global) {
+import type {
+    AppState,
+    City,
+    Shelter,
+    EvacuationPlan,
+    EvacuationNode,
+    EvacuationEdge,
+    DataDisplayElements
+} from '../types';
+
+(function (global: Window) {
     'use strict';
 
-    const rgba = global.DataDisplay.rgba;
+    const rgba = (global.DataDisplay as any).rgba;
 
-    const VEHICLE_COLORS = [
+    const VEHICLE_COLORS: string[] = [
         '#4a9eff', '#66bb6a', '#ffa726', '#ef5350', '#ab47bc',
         '#26c6da', '#ffca28', '#8d6e63', '#ec407a', '#78909c'
     ];
 
-    function createVehicleParticles(evacuationPlan, cities, shelters, scale) {
-        const particles = [];
+    interface VehicleParticle {
+        planIndex: number;
+        pathIndex: number;
+        pathProgress: number;
+        startDelay: number;
+        speed: number;
+        size: number;
+        color: string;
+        active: boolean;
+        completed: boolean;
+        x: number;
+        y: number;
+    }
+
+    interface CityPlan {
+        cityIndex: number;
+        evacuated: number;
+        path: EvacuationEdge[];
+        travelTimeHours: number;
+        canEvacuate?: boolean;
+    }
+
+    interface ExtendedEvacuationPlan extends EvacuationPlan {
+        cityPlans?: CityPlan[];
+        roadDensities?: { edge: EvacuationEdge; density: number }[];
+        graph?: { nodes: EvacuationNode[] };
+        totalEvacuated?: number;
+    }
+
+    function createVehicleParticles(
+        evacuationPlan: ExtendedEvacuationPlan,
+        cities: City[],
+        shelters: Shelter[],
+        scale: number
+    ): VehicleParticle[] {
+        const particles: VehicleParticle[] = [];
         const cityPlans = evacuationPlan.cityPlans;
 
-        cityPlans.forEach(function (plan, planIdx) {
+        if (!cityPlans) return particles;
+
+        cityPlans.forEach(function (plan: CityPlan, planIdx: number) {
             if (plan.evacuated <= 0 || !plan.path || plan.path.length === 0) return;
 
             const city = cities[plan.cityIndex];
@@ -41,18 +87,32 @@
         return particles;
     }
 
-    function updateVehicles(particles, evacuationPlan, cities, shelters, graph, deltaTime, speedMultiplier) {
+    interface VehicleStats {
+        total: number;
+        active: number;
+        completed: number;
+    }
+
+    function updateVehicles(
+        particles: VehicleParticle[],
+        evacuationPlan: ExtendedEvacuationPlan,
+        cities: City[],
+        shelters: Shelter[],
+        graph: { nodes: EvacuationNode[] },
+        deltaTime: number,
+        speedMultiplier: number
+    ): VehicleStats {
         const nodes = graph.nodes;
         let completedCount = 0;
         let activeCount = 0;
 
-        particles.forEach(function (p) {
+        particles.forEach(function (p: VehicleParticle) {
             if (p.completed) {
                 completedCount++;
                 return;
             }
 
-            const plan = evacuationPlan.cityPlans[p.planIndex];
+            const plan = evacuationPlan.cityPlans?.[p.planIndex];
             if (!plan || !plan.path || plan.path.length === 0) {
                 p.completed = true;
                 completedCount++;
@@ -109,20 +169,25 @@
         };
     }
 
-    function drawRoadDensity(ctx, evacuationPlan, state) {
+    function drawRoadDensity(
+        ctx: CanvasRenderingContext2D,
+        evacuationPlan: ExtendedEvacuationPlan,
+        state: AppState
+    ): void {
         const roadDensities = evacuationPlan.roadDensities;
+        if (!roadDensities) return;
 
-        roadDensities.forEach(function (rd) {
+        roadDensities.forEach(function (rd: { edge: EvacuationEdge; density: number }) {
             const edge = rd.edge;
             const density = rd.density;
 
-            const fromNode = evacuationPlan.graph.nodes[edge.from];
-            const toNode = evacuationPlan.graph.nodes[edge.to];
+            const fromNode = evacuationPlan.graph?.nodes[edge.from];
+            const toNode = evacuationPlan.graph?.nodes[edge.to];
 
             if (!fromNode || !toNode) return;
 
-            let color;
-            let lineWidth;
+            let color: string;
+            let lineWidth: number;
 
             if (density < 0.3) {
                 color = rgba(100, 200, 100, 0.6);
@@ -149,8 +214,12 @@
         });
     }
 
-    function drawShelters(ctx, shelters, state) {
-        shelters.forEach(function (shelter, idx) {
+    function drawShelters(
+        ctx: CanvasRenderingContext2D,
+        shelters: Shelter[],
+        state: AppState
+    ): void {
+        shelters.forEach(function (shelter: Shelter, idx: number) {
             const x = shelter.x;
             const y = shelter.y;
             const size = 24;
@@ -184,7 +253,7 @@
 
             if (state.showLabels) {
                 ctx.fillStyle = 'rgba(0,0,0,0.7)';
-                const label = shelter.name;
+                const label = (shelter as any).name || `避难所${idx + 1}`;
                 const tw = ctx.measureText(label).width;
                 ctx.fillRect(x - tw / 2 - 6, y + size + 4, tw + 12, 18);
                 ctx.fillStyle = '#00ff88';
@@ -204,8 +273,11 @@
         });
     }
 
-    function drawVehicles(ctx, particles) {
-        particles.forEach(function (p) {
+    function drawVehicles(
+        ctx: CanvasRenderingContext2D,
+        particles: VehicleParticle[]
+    ): void {
+        particles.forEach(function (p: VehicleParticle) {
             if (p.completed || !p.active) return;
 
             ctx.fillStyle = p.color;
@@ -219,15 +291,20 @@
         });
     }
 
-    function drawEvacuationFlowArrows(ctx, evacuationPlan) {
+    function drawEvacuationFlowArrows(
+        ctx: CanvasRenderingContext2D,
+        evacuationPlan: ExtendedEvacuationPlan
+    ): void {
         const cityPlans = evacuationPlan.cityPlans;
+        if (!cityPlans) return;
 
-        cityPlans.forEach(function (plan) {
+        cityPlans.forEach(function (plan: CityPlan) {
             if (!plan.path || plan.path.length === 0 || plan.evacuated <= 0) return;
 
-            const nodes = evacuationPlan.graph.nodes;
+            const nodes = evacuationPlan.graph?.nodes;
+            if (!nodes) return;
 
-            plan.path.forEach(function (edge, edgeIdx) {
+            plan.path.forEach(function (edge: EvacuationEdge, edgeIdx: number) {
                 const fromNode = nodes[edge.from];
                 const toNode = nodes[edge.to];
                 if (!fromNode || !toNode) return;
@@ -238,7 +315,7 @@
                 const angle = Math.atan2(toNode.y - fromNode.y, toNode.x - fromNode.x);
                 const arrowSize = 8;
 
-                let arrowAlpha;
+                let arrowAlpha: number;
                 if (plan.canEvacuate) {
                     arrowAlpha = 0.6;
                 } else {
@@ -265,13 +342,24 @@
         });
     }
 
-    function formatNumber(num) {
+    function formatNumber(num: number): string {
         if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
         if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
         return Math.round(num).toString();
     }
 
-    let animationState = {
+    interface AnimationState {
+        isPlaying: boolean;
+        animationId: number | null;
+        startTime: number;
+        lastTime: number;
+        particles: VehicleParticle[];
+        speed: number;
+        currentTime: number;
+        maxTime: number;
+    }
+
+    let animationState: AnimationState = {
         isPlaying: false,
         animationId: null,
         startTime: 0,
@@ -282,7 +370,22 @@
         maxTime: 1
     };
 
-    function startEvacuationAnimation(ctx, canvas, state, elements, evacuationPlan) {
+    interface EvacuationElements {
+        evacProgress?: HTMLElement;
+        evacEvacuated?: HTMLElement;
+        evacStranded?: HTMLElement;
+        evacTime?: HTMLElement;
+        evacStartBtn?: HTMLButtonElement;
+        [key: string]: HTMLElement | HTMLButtonElement | undefined;
+    }
+
+    function startEvacuationAnimation(
+        ctx: CanvasRenderingContext2D,
+        canvas: HTMLCanvasElement,
+        state: AppState,
+        elements: EvacuationElements | undefined,
+        evacuationPlan: ExtendedEvacuationPlan
+    ): void {
         if (animationState.isPlaying) return;
         if (!evacuationPlan || !evacuationPlan.cityPlans) return;
 
@@ -296,7 +399,7 @@
         animationState.currentTime = 0;
 
         let maxTravelTime = 0;
-        evacuationPlan.cityPlans.forEach(function (plan) {
+        evacuationPlan.cityPlans.forEach(function (plan: CityPlan) {
             if (plan.travelTimeHours < Infinity && plan.travelTimeHours > maxTravelTime) {
                 maxTravelTime = plan.travelTimeHours;
             }
@@ -306,7 +409,7 @@
         animationState.lastTime = performance.now();
         animationState.startTime = animationState.lastTime;
 
-        function animate(now) {
+        function animate(now: number): void {
             if (!animationState.isPlaying) return;
 
             const deltaTime = (now - animationState.lastTime) / 1000;
@@ -321,7 +424,7 @@
                 evacuationPlan,
                 state.cities,
                 state.shelters,
-                evacuationPlan.graph,
+                evacuationPlan.graph!,
                 deltaTime,
                 animationState.speed
             );
@@ -336,8 +439,10 @@
             drawVehicles(ctx, animationState.particles);
 
             const progress = Math.min(1, animationState.currentTime / animationState.maxTime);
-            const evacuatedSoFar = Math.floor(evacuationPlan.totalEvacuated * Math.min(1, progress * 1.5));
-            const strandedSoFar = evacuationPlan.totalPopulation - evacuatedSoFar;
+            const totalEvacuated = evacuationPlan.totalEvacuated || 0;
+            const totalPopulation = evacuationPlan.totalPopulation;
+            const evacuatedSoFar = Math.floor(totalEvacuated * Math.min(1, progress * 1.5));
+            const strandedSoFar = totalPopulation - evacuatedSoFar;
 
             if (elements) {
                 if (elements.evacProgress) {
@@ -368,7 +473,7 @@
         animationState.animationId = requestAnimationFrame(animate);
     }
 
-    function stopEvacuationAnimation() {
+    function stopEvacuationAnimation(): void {
         animationState.isPlaying = false;
         if (animationState.animationId) {
             cancelAnimationFrame(animationState.animationId);
@@ -376,7 +481,12 @@
         }
     }
 
-    function resetEvacuationAnimation(ctx, canvas, state, evacuationPlan) {
+    function resetEvacuationAnimation(
+        ctx: CanvasRenderingContext2D,
+        canvas: HTMLCanvasElement,
+        state: AppState,
+        evacuationPlan: ExtendedEvacuationPlan
+    ): void {
         stopEvacuationAnimation();
         animationState.currentTime = 0;
         animationState.particles = [];
@@ -391,15 +501,19 @@
         }
     }
 
-    function isEvacuating() {
+    function isEvacuating(): boolean {
         return animationState.isPlaying;
     }
 
-    function setSpeed(speed) {
+    function setSpeed(speed: number): void {
         animationState.speed = speed;
     }
 
-    function drawEvacuationStatic(ctx, state, evacuationPlan) {
+    function drawEvacuationStatic(
+        ctx: CanvasRenderingContext2D,
+        state: AppState,
+        evacuationPlan: ExtendedEvacuationPlan
+    ): void {
         if (!evacuationPlan) return;
         drawRoadDensity(ctx, evacuationPlan, state);
         drawEvacuationFlowArrows(ctx, evacuationPlan);
@@ -420,6 +534,6 @@
         isEvacuating: isEvacuating,
         setSpeed: setSpeed,
         formatNumber: formatNumber
-    };
+    } as any;
 
 })(window);

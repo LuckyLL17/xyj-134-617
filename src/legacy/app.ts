@@ -1,9 +1,16 @@
-(function () {
+import type {
+    Explosion,
+    AppState,
+    UIElements,
+    DataDisplayElements
+} from '../types';
+
+(function (): void {
     'use strict';
 
-    let explosionIdCounter = 0;
+    let explosionIdCounter: number = 0;
 
-    function createExplosion(defaults) {
+    function createExplosion(defaults?: Partial<Explosion>): Explosion {
         explosionIdCounter++;
         return Object.assign({
             id: explosionIdCounter,
@@ -15,7 +22,7 @@
         }, defaults || {});
     }
 
-    const state = {
+    const state: AppState = {
         explosions: [],
         selectedExplosionId: null,
         viewMode: 'combined',
@@ -41,25 +48,25 @@
         effectCtx: null
     };
 
-    function getSelectedExplosion() {
+    function getSelectedExplosion(): Explosion | null {
         if (!state.selectedExplosionId) return null;
-        return state.explosions.find(function (e) { return e.id === state.selectedExplosionId; }) || null;
+        return state.explosions.find(function (e: Explosion): boolean { return e.id === state.selectedExplosionId; }) || null;
     }
 
-    function getExplosionById(id) {
-        return state.explosions.find(function (e) { return e.id === id; }) || null;
+    function getExplosionById(id: number): Explosion | null {
+        return state.explosions.find(function (e: Explosion): boolean { return e.id === id; }) || null;
     }
 
-    const mapCanvas = document.getElementById('mapCanvas');
-    const effectCanvas = document.getElementById('effectCanvas');
-    const mapCtx = mapCanvas.getContext('2d');
-    const effectCtx = effectCanvas.getContext('2d');
-    const mapWrapper = document.getElementById('mapWrapper');
-    const flashOverlay = document.getElementById('flashOverlay');
-    const mapHint = document.getElementById('mapHint');
+    const mapCanvas: HTMLCanvasElement = document.getElementById('mapCanvas') as HTMLCanvasElement;
+    const effectCanvas: HTMLCanvasElement = document.getElementById('effectCanvas') as HTMLCanvasElement;
+    const mapCtx: CanvasRenderingContext2D = mapCanvas.getContext('2d') as CanvasRenderingContext2D;
+    const effectCtx: CanvasRenderingContext2D = effectCanvas.getContext('2d') as CanvasRenderingContext2D;
+    const mapWrapper: HTMLElement = document.getElementById('mapWrapper') as HTMLElement;
+    const flashOverlay: HTMLElement = document.getElementById('flashOverlay') as HTMLElement;
+    const mapHint: HTMLElement = document.getElementById('mapHint') as HTMLElement;
 
-    function regenerateTerrain() {
-        const rect = mapWrapper.getBoundingClientRect();
+    function regenerateTerrain(): void {
+        const rect: DOMRect = mapWrapper.getBoundingClientRect();
         if (state.terrainEnabled) {
             state.terrainData = window.Physics.generateTerrainFeatures(
                 rect.width, rect.height,
@@ -75,9 +82,9 @@
         }
     }
 
-    function init() {
-        const elements = window.UI.getControlElements();
-        const dataElements = window.DataDisplay.getElements();
+    function init(): void {
+        const elements: UIElements = window.UI.getControlElements();
+        const dataElements: DataDisplayElements = window.DataDisplay.getElements();
 
         state.mapCtx = mapCtx;
         state.effectCtx = effectCtx;
@@ -85,11 +92,11 @@
         window.Renderer.setupCanvas(mapCanvas, effectCanvas, mapCtx, effectCtx, mapWrapper, state);
         window.UI.setupEventListeners(elements, dataElements, state, mapCanvas, mapCtx, effectCtx, effectCanvas, mapWrapper, flashOverlay, mapHint);
 
-        const rect = mapWrapper.getBoundingClientRect();
+        const rect: DOMRect = mapWrapper.getBoundingClientRect();
 
         regenerateTerrain();
 
-        const firstExplosion = createExplosion({
+        const firstExplosion: Explosion = createExplosion({
             explosionCenter: {
                 x: rect.width / 2,
                 y: rect.height / 2
@@ -113,24 +120,24 @@
         window.Renderer.drawMap(mapCtx, mapWrapper, state);
     }
 
-    function initEvacuation(elements, width, height) {
-        const shelterCount = elements.shelterCount
-            ? parseInt(elements.shelterCount.value, 10)
+    function initEvacuation(elements: UIElements, width: number, height: number): void {
+        const shelterCount: number = elements.shelterCount
+            ? parseInt((elements.shelterCount as HTMLInputElement).value, 10)
             : 3;
 
         state.shelters = window.Physics.generateShelters(width, height, shelterCount);
         state.evacuationRoads = window.Physics.generateRoadNetwork(width, height, state.cities, state.shelters);
 
-        const warningTime = elements.warningTimeSlider
-            ? parseInt(elements.warningTimeSlider.value, 10)
+        const warningTime: number = elements.warningTimeSlider
+            ? parseInt((elements.warningTimeSlider as HTMLInputElement).value, 10)
             : 30;
 
-        const roadCapMultiplier = elements.roadCapacity
-            ? parseFloat(elements.roadCapacity.value)
+        const roadCapMultiplier: number = elements.roadCapacity
+            ? parseFloat((elements.roadCapacity as HTMLInputElement).value)
             : 1;
 
-        const vehSpeed = elements.vehicleSpeed
-            ? parseInt(elements.vehicleSpeed.value, 10)
+        const vehSpeed: number = elements.vehicleSpeed
+            ? parseInt((elements.vehicleSpeed as HTMLInputElement).value, 10)
             : 60;
 
         state.evacuationPlan = window.Physics.calculateEvacuationPlan(
@@ -146,7 +153,7 @@
         window.UI.updateEvacuationDisplay(state, elements);
 
         if (elements.evacuationPanel) {
-            elements.evacuationPanel.classList.toggle('hidden', !state.evacuationEnabled);
+            (elements.evacuationPanel as HTMLElement).classList.toggle('hidden', !state.evacuationEnabled);
         }
     }
 
@@ -155,7 +162,7 @@
         getSelectedExplosion: getSelectedExplosion,
         getExplosionById: getExplosionById,
         regenerateTerrain: regenerateTerrain,
-        get state() { return state; }
+        get state(): AppState { return state; }
     };
 
     document.addEventListener('DOMContentLoaded', init);
