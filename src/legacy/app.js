@@ -50,13 +50,13 @@
         return state.explosions.find(function (e) { return e.id === id; }) || null;
     }
 
-    const mapCanvas = document.getElementById('mapCanvas');
-    const effectCanvas = document.getElementById('effectCanvas');
-    const mapCtx = mapCanvas.getContext('2d');
-    const effectCtx = effectCanvas.getContext('2d');
-    const mapWrapper = document.getElementById('mapWrapper');
-    const flashOverlay = document.getElementById('flashOverlay');
-    const mapHint = document.getElementById('mapHint');
+    let mapCanvas;
+    let effectCanvas;
+    let mapCtx;
+    let effectCtx;
+    let mapWrapper;
+    let flashOverlay;
+    let mapHint;
 
     function regenerateTerrain() {
         const rect = mapWrapper.getBoundingClientRect();
@@ -76,6 +76,14 @@
     }
 
     function init() {
+        mapCanvas = document.getElementById('mapCanvas');
+        effectCanvas = document.getElementById('effectCanvas');
+        mapCtx = mapCanvas.getContext('2d');
+        effectCtx = effectCanvas.getContext('2d');
+        mapWrapper = document.getElementById('mapWrapper');
+        flashOverlay = document.getElementById('flashOverlay');
+        mapHint = document.getElementById('mapHint');
+
         const elements = window.UI.getControlElements();
         const dataElements = window.DataDisplay.getElements();
 
