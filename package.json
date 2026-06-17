@@ -1,0 +1,32 @@
+{
+  "name": "nuclear-explosion-simulator",
+  "version": "1.0.0",
+  "description": "核爆模拟器 - 科学可视化核爆范围与爆炸过程模拟",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "type-check": "vue-tsc --noEmit",
+    "type-check:watch": "vue-tsc --noEmit --watch"
+  },
+  "keywords": [
+    "vue",
+    "typescript",
+    "vite",
+    "nuclear",
+    "simulator"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "vue": "^3.5.38"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.7",
+    "@types/node": "^20.11.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.16",
+    "vue-tsc": "^3.3.5"
+  }
+}
