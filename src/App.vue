@@ -1,0 +1,701 @@
+<template>
+  <div class="app-container">
+    <header class="header">
+      <div class="logo">
+        <span class="logo-icon">☢</span>
+        <h1>核爆模拟器</h1>
+      </div>
+      <p class="subtitle">科学可视化 · 核爆范围与爆炸过程模拟</p>
+    </header>
+
+    <div class="main-content">
+      <aside class="control-panel">
+        <section class="panel-section">
+          <h2>爆炸点管理</h2>
+          <div class="explosion-list" id="explosionList"></div>
+          <div class="explosion-actions">
+            <button id="addExplosionBtn" class="add-btn">
+              <span class="btn-icon">+</span> 添加爆炸点
+            </button>
+            <button id="removeExplosionBtn" class="remove-btn">
+              <span class="btn-icon">−</span> 删除选中
+            </button>
+          </div>
+          <div class="explosion-info" id="explosionInfo">
+            <span class="info-text">当前爆炸点数量：</span>
+            <span class="info-count" id="explosionCount">0</span>
+          </div>
+        </section>
+
+        <section class="panel-section">
+          <h2>爆炸参数 <span class="param-target" id="paramTarget">（爆炸点 #1）</span></h2>
+
+          <div class="form-group">
+            <label>核弹类型</label>
+            <select id="bombType">
+              <option value="custom">自定义</option>
+              <option value="little_boy">小男孩（广岛，15 千吨）</option>
+              <option value="fat_man">胖子（长崎，21 千吨）</option>
+              <option value="tsar_bomba">沙皇炸弹（50,000 千吨）</option>
+              <option value="b83">B83 核弹（1,200 千吨）</option>
+              <option value="w88">W88 核弹头（475 千吨）</option>
+              <option value="trinity">三位一体（20 千吨）</option>
+              <option value="castle_bravo">喝彩城堡（15,000 千吨）</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>爆炸当量 (千吨 TNT)</label>
+            <input type="range" id="yieldSlider" min="1" max="50000" value="15000" />
+            <div class="slider-value"><span id="yieldValue">15,000</span> 千吨</div>
+          </div>
+
+          <div class="form-group">
+            <label>爆炸高度 (米)</label>
+            <select id="burstHeight">
+              <option value="0">地面爆炸</option>
+              <option value="500">低空爆炸 (500m)</option>
+              <option value="1000" selected>中空爆炸 (1000m)</option>
+              <option value="2000">高空爆炸 (2000m)</option>
+              <option value="5000">超高空爆炸 (5000m)</option>
+            </select>
+          </div>
+        </section>
+
+        <section class="panel-section">
+          <h2>地图设置</h2>
+          <div class="form-group">
+            <label>地图比例尺 (像素/公里)</label>
+            <input type="range" id="scaleSlider" min="5" max="50" value="20" />
+            <div class="slider-value"><span id="scaleValue">20</span> 像素/公里</div>
+          </div>
+          <div class="form-group checkbox-group">
+            <input type="checkbox" id="showLabels" checked />
+            <label for="showLabels">显示圈层标签</label>
+          </div>
+          <div class="form-group checkbox-group">
+            <input type="checkbox" id="showLegend" checked />
+            <label for="showLegend">显示图例</label>
+          </div>
+        </section>
+
+        <section class="panel-section terrain-section">
+          <h2>🏔️ 地形高程设置</h2>
+          <div class="form-group checkbox-group">
+            <input type="checkbox" id="terrainEnabled" checked />
+            <label for="terrainEnabled">启用地形衰减</label>
+          </div>
+          <div class="form-group">
+            <label>地形预设</label>
+            <select id="terrainPreset">
+              <option value="flat">平坦地形（无衰减）</option>
+              <option value="gentle">丘陵地形（轻微影响）</option>
+              <option value="mountainous" selected>多山地形（显著影响）</option>
+              <option value="extreme">极端地形（强烈影响）</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>地形强度倍率</label>
+            <input type="range" id="terrainIntensity" min="0.1" max="2" step="0.1" value="1" />
+            <div class="slider-value"><span id="terrainIntensityValue">1.0</span> x</div>
+          </div>
+          <div class="form-group checkbox-group">
+            <input type="checkbox" id="showTerrainHeatmap" checked />
+            <label for="showTerrainHeatmap">显示地形热力图</label>
+          </div>
+          <div class="form-group checkbox-group">
+            <input type="checkbox" id="showTerrainContours" checked />
+            <label for="showTerrainContours">显示等高线</label>
+          </div>
+          <div class="terrain-actions">
+            <button id="regenerateTerrainBtn" class="regenerate-btn">
+              <span class="btn-icon">🎲</span> 重新生成地形
+            </button>
+          </div>
+          <div class="terrain-info" id="terrainInfo">
+            <div class="terrain-info-row">
+              <span>山脉:</span>
+              <span id="mountainCount">0</span>
+            </div>
+            <div class="terrain-info-row">
+              <span>丘陵:</span>
+              <span id="hillCount">0</span>
+            </div>
+            <div class="terrain-info-row">
+              <span>盆地:</span>
+              <span id="basinCount">0</span>
+            </div>
+            <div class="terrain-info-row">
+              <span>最高海拔:</span>
+              <span id="maxElevation">0</span> m
+            </div>
+          </div>
+        </section>
+
+        <section class="panel-section evacuation-section">
+          <h2>🚗 撤离路径规划</h2>
+          <div class="form-group checkbox-group">
+            <input type="checkbox" id="evacuationEnabled" checked />
+            <label for="evacuationEnabled">显示撤离模拟</label>
+          </div>
+          <div class="form-group">
+            <label>避难所数量</label>
+            <select id="shelterCount">
+              <option value="2">2 个</option>
+              <option value="3" selected>3 个</option>
+              <option value="4">4 个</option>
+              <option value="5">5 个</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>预警提前时间 (分钟)</label>
+            <input type="range" id="warningTimeSlider" min="5" max="120" value="30" />
+            <div class="slider-value"><span id="warningTimeValue">30</span> 分钟</div>
+          </div>
+          <div class="form-group">
+            <label>道路承载倍率</label>
+            <select id="roadCapacity">
+              <option value="0.5">0.5x (低承载)</option>
+              <option value="1" selected>1.0x (正常)</option>
+              <option value="2">2.0x (高承载)</option>
+              <option value="3">3.0x (极高承载)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>车辆行驶速度</label>
+            <select id="vehicleSpeed">
+              <option value="30">30 km/h (拥堵)</option>
+              <option value="60" selected>60 km/h (正常)</option>
+              <option value="90">90 km/h (畅通)</option>
+              <option value="120">120 km/h (高速)</option>
+            </select>
+          </div>
+          <div class="evac-actions">
+            <button id="recalcEvacBtn" class="recalc-btn">
+              <span class="btn-icon">🔄</span> 重新计算路径
+            </button>
+            <button id="addShelterBtn" class="add-shelter-btn">
+              <span class="btn-icon">+</span> 添加避难所
+            </button>
+          </div>
+          <div class="evac-hint">
+            💡 <strong>提示：</strong>点击地图空白处可移动选中的避难所
+          </div>
+        </section>
+
+        <section class="panel-section action-section">
+          <button id="detonateBtn" class="detonate-btn">
+            <span class="btn-icon">💥</span>
+            同时引爆所有
+          </button>
+          <button id="resetBtn" class="reset-btn">
+            <span class="btn-icon">↺</span>
+            清空所有
+          </button>
+        </section>
+
+        <section class="panel-section zone-editor-section">
+          <h2>🎯 破坏圈层编辑器</h2>
+          <div class="zone-editor-controls">
+            <button id="addZoneBtn" class="add-btn">
+              <span class="btn-icon">+</span> 新增圈层
+            </button>
+            <button id="resetZonesBtn" class="reset-zones-btn">
+              <span class="btn-icon">↺</span> 恢复默认
+            </button>
+          </div>
+          <div class="zone-list" id="zoneList"></div>
+          <div class="zone-editor-hint">💡 拖动调整圈层顺序，点击编辑参数</div>
+        </section>
+
+        <section class="panel-section">
+          <h2>使用说明</h2>
+          <ul class="instructions">
+            <li><strong>Shift + 点击地图</strong>：直接添加新爆炸点</li>
+            <li><strong>普通点击爆炸点</strong>：选中切换爆炸点</li>
+            <li><strong>普通点击空地</strong>：移动当前选中爆炸点位置</li>
+            <li>每个爆炸点可独立设置当量/类型/高度</li>
+            <li>交叉阴影表示多个爆炸点叠加覆盖区</li>
+            <li>点击「同时引爆所有」触发联合动画</li>
+            <li>🏔️ <strong>地形影响</strong>：山脉/丘陵会阻挡冲击波和辐射</li>
+            <li>🎲 可在「地形高程设置」中切换预设和重新生成</li>
+            <li>🎯 <strong>自定义圈层</strong>：在「破坏圈层编辑器」中增删改圈层</li>
+            <li>数据仅供科普参考</li>
+          </ul>
+        </section>
+      </aside>
+
+      <main class="map-container">
+        <div class="map-wrapper" id="mapWrapper">
+          <canvas id="mapCanvas"></canvas>
+          <canvas id="effectCanvas"></canvas>
+          <div id="flashOverlay" class="flash-overlay"></div>
+          <div class="map-hint" id="mapHint">👆 点击地图选择爆炸位置</div>
+        </div>
+
+        <div class="legend" id="legend">
+          <h3>破坏圈层图例</h3>
+          <div class="legend-items" id="legendItems"></div>
+        </div>
+
+        <div class="data-panels" id="dataPanels"></div>
+
+        <div class="casualty-panel" id="casualtyPanel">
+          <div class="panel-header">
+            <h3>📊 影响预估</h3>
+            <div class="view-toggle">
+              <button class="toggle-btn active" data-view="combined">联合影响</button>
+              <button class="toggle-btn" data-view="selected">选中爆炸点</button>
+            </div>
+          </div>
+          <div class="casualty-grid">
+            <div class="casualty-item">
+              <span class="casualty-icon">💀</span>
+              <div>
+                <div class="casualty-label">预估死亡人数</div>
+                <div class="casualty-value" id="estimatedDeaths">0</div>
+              </div>
+            </div>
+            <div class="casualty-item">
+              <span class="casualty-icon">🩹</span>
+              <div>
+                <div class="casualty-label">预估受伤人数</div>
+                <div class="casualty-value" id="estimatedInjured">0</div>
+              </div>
+            </div>
+            <div class="casualty-item">
+              <span class="casualty-icon">🏙️</span>
+              <div>
+                <div class="casualty-label">影响区域面积</div>
+                <div class="casualty-value"><span id="affectedArea">0</span> km²</div>
+              </div>
+            </div>
+            <div class="casualty-item">
+              <span class="casualty-icon">⚡</span>
+              <div>
+                <div class="casualty-label">总释放能量</div>
+                <div class="casualty-value"><span id="energyReleased">0</span> TJ</div>
+              </div>
+            </div>
+          </div>
+          <div class="combined-stats" id="combinedStats">
+            <div class="stat-row">
+              <span class="stat-label">爆炸点数量</span>
+              <span class="stat-value" id="statExplosionCount">0</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">联合覆盖面积（去重）</span>
+              <span class="stat-value"><span id="statCombinedArea">0</span> km²</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">总面积累加（含重叠）</span>
+              <span class="stat-value"><span id="statTotalArea">0</span> km²</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">重叠区域面积</span>
+              <span class="stat-value"><span id="statOverlapArea">0</span> km²</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="building-panel" id="buildingPanel">
+          <div class="panel-header">
+            <h3>🏗️ 建筑结构等级</h3>
+            <div class="building-view-toggle">
+              <button class="building-toggle-btn active" data-building-view="summary">综合</button>
+              <button class="building-toggle-btn" data-building-view="byType">按类型</button>
+              <button class="building-toggle-btn" data-building-view="byDamage">按破坏</button>
+            </div>
+          </div>
+
+          <div class="building-summary" id="buildingSummaryView">
+            <div class="building-stats-grid">
+              <div class="building-stat-item">
+                <span class="building-stat-icon">🏢</span>
+                <div>
+                  <div class="building-stat-label">总人口</div>
+                  <div class="building-stat-value" id="buildingTotalPop">0</div>
+                </div>
+              </div>
+              <div class="building-stat-item">
+                <span class="building-stat-icon">💥</span>
+                <div>
+                  <div class="building-stat-label">建筑摧毁人口</div>
+                  <div class="building-stat-value danger" id="buildingDestroyedPop">0</div>
+                </div>
+              </div>
+              <div class="building-stat-item">
+                <span class="building-stat-icon">📐</span>
+                <div>
+                  <div class="building-stat-label">平均结构强度</div>
+                  <div class="building-stat-value" id="buildingAvgStrength">0</div>
+                </div>
+              </div>
+              <div class="building-stat-item">
+                <span class="building-stat-icon">💚</span>
+                <div>
+                  <div class="building-stat-label">整体存活率</div>
+                  <div class="building-stat-value success" id="buildingSurvivalRate">0%</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="building-overpressure-info">
+              <div class="overpressure-header">
+                <span>冲击波超压分布</span>
+                <span class="overpressure-value" id="maxOverpressure">0 psi</span>
+              </div>
+              <div class="overpressure-bar-container">
+                <div class="overpressure-bar" id="overpressureBar"></div>
+              </div>
+              <div class="overpressure-labels">
+                <span>0</span>
+                <span>5 psi</span>
+                <span>10 psi</span>
+                <span>20+ psi</span>
+              </div>
+            </div>
+
+            <div class="building-damage-legend">
+              <div class="damage-legend-title">破坏等级说明</div>
+              <div class="damage-legend-items">
+                <div class="damage-legend-item">
+                  <span class="damage-dot" style="background: #4caf50"></span>
+                  <span class="damage-name">完好</span>
+                  <span class="damage-desc">无明显损坏</span>
+                </div>
+                <div class="damage-legend-item">
+                  <span class="damage-dot" style="background: #ffeb3b"></span>
+                  <span class="damage-name">轻微</span>
+                  <span class="damage-desc">门窗破损</span>
+                </div>
+                <div class="damage-legend-item">
+                  <span class="damage-dot" style="background: #ff9800"></span>
+                  <span class="damage-name">中度</span>
+                  <span class="damage-desc">墙体开裂</span>
+                </div>
+                <div class="damage-legend-item">
+                  <span class="damage-dot" style="background: #f44336"></span>
+                  <span class="damage-name">严重</span>
+                  <span class="damage-desc">结构受损</span>
+                </div>
+                <div class="damage-legend-item">
+                  <span class="damage-dot" style="background: #9c27b0"></span>
+                  <span class="damage-name">摧毁</span>
+                  <span class="damage-desc">完全倒塌</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="building-by-type" id="buildingByTypeView" style="display: none">
+            <div class="building-type-list" id="buildingTypeList"></div>
+          </div>
+
+          <div class="building-by-damage" id="buildingByDamageView" style="display: none">
+            <div class="damage-distribution">
+              <div class="damage-bar-chart" id="damageBarChart"></div>
+            </div>
+            <div class="damage-stats-list" id="damageStatsList"></div>
+          </div>
+
+          <div class="building-city-selector">
+            <label>查看城市详情：</label>
+            <select id="buildingCitySelect">
+              <option value="">全部城市汇总</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="timeline-panel" id="timelinePanel">
+          <div class="panel-header">
+            <h3>⏱️ 时间轴推演</h3>
+            <div class="timeline-mode-badge" id="timelineModeBadge">待机中</div>
+          </div>
+
+          <div class="timeline-stages" id="timelineStages">
+            <div class="stage-dot active" data-stage="0">
+              <div class="stage-marker"></div>
+              <span class="stage-label">爆炸瞬间</span>
+              <span class="stage-time">T+0</span>
+            </div>
+            <div class="stage-line"></div>
+            <div class="stage-dot" data-stage="1">
+              <div class="stage-marker"></div>
+              <span class="stage-label">早期沉降</span>
+              <span class="stage-time">1小时</span>
+            </div>
+            <div class="stage-line"></div>
+            <div class="stage-dot" data-stage="2">
+              <div class="stage-marker"></div>
+              <span class="stage-label">中期扩散</span>
+              <span class="stage-time">1天</span>
+            </div>
+            <div class="stage-line"></div>
+            <div class="stage-dot" data-stage="3">
+              <div class="stage-marker"></div>
+              <span class="stage-label">晚期沉降</span>
+              <span class="stage-time">1周</span>
+            </div>
+            <div class="stage-line"></div>
+            <div class="stage-dot" data-stage="4">
+              <div class="stage-marker"></div>
+              <span class="stage-label">长期影响</span>
+              <span class="stage-time">1月</span>
+            </div>
+          </div>
+
+          <div class="timeline-controls">
+            <button class="timeline-btn" id="timelinePlayBtn" disabled>
+              <span class="btn-icon">▶</span> 播放
+            </button>
+            <button class="timeline-btn" id="timelineResetBtn" disabled>
+              <span class="btn-icon">↺</span> 重置
+            </button>
+            <div class="timeline-slider-container">
+              <input type="range" id="timelineSlider" min="0" max="1000" value="0" disabled />
+            </div>
+            <div class="timeline-speed">
+              <label>速度</label>
+              <select id="timelineSpeed" disabled>
+                <option value="0.5">0.5x</option>
+                <option value="1" selected>1x</option>
+                <option value="2">2x</option>
+                <option value="4">4x</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="timeline-current-info">
+            <div class="info-block">
+              <span class="info-label">当前时间点</span>
+              <span class="info-value" id="timelineCurrentTime">爆炸瞬间</span>
+            </div>
+            <div class="info-block">
+              <span class="info-label">累计死亡</span>
+              <span class="info-value death-value" id="timelineDeaths">0</span>
+            </div>
+            <div class="info-block">
+              <span class="info-label">累计受伤</span>
+              <span class="info-value injured-value" id="timelineInjured">0</span>
+            </div>
+            <div class="info-block">
+              <span class="info-label">沉降范围</span>
+              <span class="info-value fallout-value" id="timelineFalloutArea">0 km²</span>
+            </div>
+          </div>
+
+          <div class="trend-chart-container">
+            <div class="chart-header">
+              <span class="chart-title">📈 伤亡增长趋势</span>
+              <div class="chart-legend">
+                <span class="legend-dot death-dot"></span> 死亡
+                <span class="legend-dot injured-dot"></span> 受伤
+              </div>
+            </div>
+            <canvas id="trendChartCanvas" height="180"></canvas>
+          </div>
+        </div>
+
+        <div class="evacuation-panel" id="evacuationPanel">
+          <div class="panel-header">
+            <h3>🚗 撤离模拟</h3>
+            <div class="evac-mode-badge" id="evacModeBadge">就绪</div>
+          </div>
+
+          <div class="evac-stats-grid">
+            <div class="evac-stat-item">
+              <span class="evac-stat-icon">👥</span>
+              <div>
+                <div class="evac-stat-label">总人口</div>
+                <div class="evac-stat-value" id="evacTotalPop">0</div>
+              </div>
+            </div>
+            <div class="evac-stat-item success">
+              <span class="evac-stat-icon">✅</span>
+              <div>
+                <div class="evac-stat-label">可撤离</div>
+                <div class="evac-stat-value" id="evacEvacuated">0</div>
+              </div>
+            </div>
+            <div class="evac-stat-item danger">
+              <span class="evac-stat-icon">⚠️</span>
+              <div>
+                <div class="evac-stat-label">未及时撤离</div>
+                <div class="evac-stat-value" id="evacStranded">0</div>
+              </div>
+            </div>
+            <div class="evac-stat-item">
+              <span class="evac-stat-icon">📊</span>
+              <div>
+                <div class="evac-stat-label">撤离成功率</div>
+                <div class="evac-stat-value" id="evacRate">0%</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="evac-progress-section">
+            <div class="evac-progress-header">
+              <span>撤离进度</span>
+              <span id="evacProgress">0%</span>
+            </div>
+            <div class="evac-progress-bar">
+              <div class="evac-progress-fill" id="evacProgressFill"></div>
+            </div>
+            <div class="evac-time-info">
+              <span>模拟时间: <strong id="evacTime">0.0 小时</strong></span>
+              <span>预警时间: <strong id="evacWarningTime">30 分钟</strong></span>
+            </div>
+          </div>
+
+          <div class="evac-controls">
+            <button class="evac-btn primary" id="evacStartBtn">
+              <span class="btn-icon">▶</span> 播放动画
+            </button>
+            <button class="evac-btn" id="evacPauseBtn" disabled>
+              <span class="btn-icon">⏸</span> 暂停
+            </button>
+            <button class="evac-btn" id="evacResetBtn">
+              <span class="btn-icon">↺</span> 重置
+            </button>
+            <div class="evac-speed">
+              <label>速度</label>
+              <select id="evacSpeed">
+                <option value="0.5">0.5x</option>
+                <option value="1" selected>1x</option>
+                <option value="2">2x</option>
+                <option value="4">4x</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="road-density-legend">
+            <div class="legend-title">道路密度图例</div>
+            <div class="density-items">
+              <div class="density-item">
+                <span class="density-bar low"></span>
+                <span>畅通 &lt;30%</span>
+              </div>
+              <div class="density-item">
+                <span class="density-bar medium"></span>
+                <span>缓行 30-60%</span>
+              </div>
+              <div class="density-item">
+                <span class="density-bar high"></span>
+                <span>拥堵 60-100%</span>
+              </div>
+              <div class="density-item">
+                <span class="density-bar critical"></span>
+                <span>严重拥堵 &gt;100%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <footer class="footer">
+      <p>⚠️ 本工具仅供科学科普与教育用途，数据基于公开物理模型估算</p>
+      <p>反对核武器扩散 · 珍爱和平</p>
+    </footer>
+
+    <div class="zone-editor-modal" id="zoneEditorModal" style="display: none">
+      <div class="modal-overlay" id="zoneEditorOverlay"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="zoneEditorTitle">编辑圈层</h3>
+          <button class="modal-close" id="zoneEditorClose">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>圈层标识 (Key)</label>
+            <input type="text" id="zoneKey" placeholder="英文标识，如 custom_zone" />
+          </div>
+          <div class="form-group">
+            <label>显示名称</label>
+            <input type="text" id="zoneLabel" placeholder="显示名称，如 冲击波" />
+          </div>
+          <div class="form-group">
+            <label>圈层颜色</label>
+            <div class="color-picker-row">
+              <input type="color" id="zoneColor" value="#ff0000" />
+              <input type="text" id="zoneColorText" placeholder="#ff0000" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label>描述</label>
+            <input type="text" id="zoneDescription" placeholder="圈层描述" />
+          </div>
+          <div class="form-group">
+            <label>最小半径 (公里)</label>
+            <input type="number" id="zoneMinRadius" step="0.1" min="0.1" value="0.5" />
+          </div>
+          <div class="form-group">
+            <label>半径计算公式</label>
+            <input type="text" id="zoneRadiusFormula" placeholder="0.7 * Math.pow(W, 1/3) * 2.5" />
+            <div class="form-hint">W = 百万吨当量, 可用 Math.pow, Math.sqrt 等函数</div>
+          </div>
+          <div class="form-group">
+            <label>高度因子类型</label>
+            <select id="zoneHeightFactor">
+              <option value="height">高度因子 (通用)</option>
+              <option value="pressure">压力因子 (辐射类)</option>
+              <option value="thermal">热因子 (热辐射类)</option>
+              <option value="none">无</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>线条样式</label>
+            <select id="zoneDash">
+              <option value="solid">实线</option>
+              <option value="dashed4">虚线 4px</option>
+              <option value="dashed8">虚线 8px</option>
+              <option value="dotted">点线</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>超压阈值 (psi)</label>
+            <input type="number" id="zoneOverpressure" step="0.1" min="0" value="5" />
+          </div>
+          <div class="form-group">
+            <label>高度敏感度</label>
+            <input type="range" id="zoneAltitudeSens" min="0" max="1" step="0.05" value="0.3" />
+            <div class="slider-value"><span id="zoneAltitudeSensValue">0.3</span></div>
+          </div>
+          <div class="form-group checkbox-group">
+            <input type="checkbox" id="zoneDestroyed" />
+            <label for="zoneDestroyed">此区域内建筑完全摧毁</label>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>死亡率</label>
+              <input type="range" id="zoneDeathRate" min="0" max="1" step="0.01" value="0.1" />
+              <div class="slider-value"><span id="zoneDeathRateValue">0.10</span></div>
+            </div>
+            <div class="form-group">
+              <label>受伤率</label>
+              <input type="range" id="zoneInjuryRate" min="0" max="1" step="0.01" value="0.2" />
+              <div class="slider-value"><span id="zoneInjuryRateValue">0.20</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="modal-btn cancel" id="zoneEditorCancel">取消</button>
+          <button class="modal-btn primary" id="zoneEditorSave">保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { onMounted, nextTick } from 'vue'
+import { initLegacyApp } from './legacy/index.ts'
+
+onMounted(() => {
+  nextTick(() => {
+    initLegacyApp()
+    console.log('[Vue] Legacy app initialized successfully')
+  })
+})
+</script>
